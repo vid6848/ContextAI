@@ -20,9 +20,10 @@ class LLMClient:
         self,
         message: str | list[dict[str, str]],
         intent: str = "GENERAL",
+        context: Any = None,
         **kwargs: Any,
     ) -> str:
-        """Call Claude via LiteLLM to generate a response given message and intent."""
+        """Call Claude via LiteLLM to generate a response given message, intent, and optional context."""
         if isinstance(message, list):
             messages = message
         else:
@@ -31,6 +32,11 @@ class LLMClient:
                 f"The intent classifier has already classified the user's request as: '{intent}'. "
                 "Provide a helpful, accurate, and concise response tailored to this intent."
             )
+            if context:
+                system_prompt += (
+                    f"\n\nContext information (conversation history and memories):\n{context}\n"
+                    "Use this context only as background information and do not invent memories."
+                )
             messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": str(message)},
@@ -47,4 +53,3 @@ class LLMClient:
         response = litellm.completion(**call_kwargs)
         content = response.choices[0].message.content
         return content or ""
-
