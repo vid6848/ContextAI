@@ -1,0 +1,24 @@
+# Backend Framework
+fastapi>=0.110.0
+uvicorn>=0.28.0
+pydantic>=2.6.0
+pydantic-settings>=2.2.0
+python-dotenv>=1.0.1
+
+# Frontend
+streamlit>=1.32.0
+requests>=2.31.0
+
+# Agent Orchestration & LLM Abstraction
+langgraph>=0.0.30
+litellm>=1.35.0
+
+# Memory & Storage
+chromadb>=0.4.24
+# Note: sqlite3 is included in Python standard library
+
+# Machine Learning (Intent Classification)
+scikit-learn>=1.4.0
+
+# Testing
+pytest>=8.1.0
