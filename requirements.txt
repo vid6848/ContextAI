@@ -13,8 +13,9 @@ requests>=2.31.0
 langgraph>=0.0.30
 litellm>=1.35.0
 
-# Memory & Storage
+# Memory, RAG & Documents
 chromadb>=0.4.24
+pymupdf>=1.24.0
 # Note: sqlite3 is included in Python standard library
 
 # Machine Learning (Intent Classification)

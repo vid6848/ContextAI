@@ -45,10 +45,11 @@ def test_agent_graph_execution_and_classifier_state():
     assert result["confidence"] > 0.20
 
     # Verify LLM client was called with correct message and intent
-    mock_llm_client.generate_response.assert_called_once_with(
-        message="What is the weather forecast for tomorrow?",
-        intent="WEATHER",
-    )
+    mock_llm_client.generate_response.assert_called_once()
+    call_kwargs = mock_llm_client.generate_response.call_args.kwargs
+    assert call_kwargs["message"] == "What is the weather forecast for tomorrow?"
+    assert call_kwargs["intent"] == "WEATHER"
+    assert "context" in call_kwargs
 
     # Verify response is stored in graph state
     assert result["response"] == "It looks like rain today."
