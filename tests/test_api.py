@@ -59,3 +59,18 @@ def test_chat_endpoint_validation_invalid_type():
     response = client.post("/api/v1/chat", json={"message": None})
     assert response.status_code == 422
 
+
+@patch("src.backend.llm.client.LLMClient.generate_response")
+def test_chat_endpoint_llm_unavailable_returns_503(mock_generate):
+    """Verify chat endpoint returns HTTP 503 with clean detail when LLM service is unavailable."""
+    from src.backend.llm.client import LLMServiceUnavailableError
+    mock_generate.side_effect = LLMServiceUnavailableError(
+        "Gemini is temporarily unavailable. Please try again in a moment."
+    )
+
+    response = client.post("/api/v1/chat", json={"message": "Hello"})
+    assert response.status_code == 503
+    data = response.json()
+    assert "Gemini is temporarily unavailable" in data["detail"]
+
+
