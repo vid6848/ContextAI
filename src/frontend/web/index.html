@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ContextAI</title>
+  <link rel="icon" type="image/png" href="/assets/logo_sidebar.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+
+<body>
+  <!-- Mobile sidebar scrim -->
+  <div id="scrim" class="scrim" hidden></div>
+
+  <div class="app-shell" id="app-shell">
+    <!-- ============================ SIDEBAR ============================ -->
+    <aside id="sidebar" class="sidebar" aria-label="Conversation navigation">
+      <div class="sidebar-inner">
+        <!-- Brand & Collapse -->
+        <div class="brand">
+          <div class="brand-left">
+            <img src="/assets/logo_sidebar.png" alt="ContextAI logo" class="brand-logo" />
+            <span class="brand-title">ContextAI</span>
+            <span class="brand-badge">Agent</span>
+          </div>
+          <button id="sidebar-close" class="icon-btn sidebar-close" aria-label="Collapse sidebar"
+            title="Collapse sidebar">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <rect width="18" height="18" x="3" y="3" rx="2" />
+              <path d="M9 3v18" />
+              <path d="m16 15-3-3 3-3" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- New Chat Action -->
+        <button id="btn-new-chat" class="new-chat-btn" title="Start a new conversation">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          New Chat
+        </button>
+
+        <!-- Search -->
+        <div class="search-wrap">
+          <svg class="search-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+          <input id="search-input" type="text" placeholder="Search chats…" autocomplete="off" />
+        </div>
+
+        <!-- Scrollable Navigation & Content -->
+        <div class="sidebar-scroll">
+          <!-- Section: Recent Conversations -->
+          <div class="sidebar-section">
+            <div class="sidebar-label">Recent Conversations</div>
+            <nav id="conversation-list" class="conversation-list" aria-label="Recent conversations"></nav>
+          </div>
+
+          <!-- Section: Knowledge & Memory -->
+          <div class="sidebar-section">
+            <div class="sidebar-label">Knowledge &amp; Assistant</div>
+            <div class="nav-stack">
+              <button class="tool-btn" data-dialog="documents" title="Manage indexed PDF documents">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <path d="M14 2v6h6" />
+                </svg>
+                <span class="nav-text">Documents &amp; RAG</span>
+                <span id="sidebar-docs-badge" class="nav-badge subtle">0 chunks</span>
+              </button>
+              <button class="tool-btn" data-dialog="memory" title="View & clear persistent memory">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path
+                    d="M12 2a7 7 0 0 1 7 7c0 2.4-1.2 4.2-2.6 5.6-.9.9-1.4 2.1-1.4 3.4H9c0-1.3-.5-2.5-1.4-3.4C6.2 13.2 5 11.4 5 9a7 7 0 0 1 7-7z" />
+                  <path d="M9 21h6" />
+                </svg>
+                <span class="nav-text">Memory</span>
+                <span class="nav-badge subtle">Persistent</span>
+              </button>
+              <button class="tool-btn nav-item-prominent" data-dialog="reminders" title="Schedule and view reminders">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="13" r="8" />
+                  <path d="M12 9v4l2.5 2.5M5 3 3 5m16-2 2 2" />
+                </svg>
+                <span class="nav-text">Reminders</span>
+                <span id="sidebar-reminders-badge" class="nav-badge accent" hidden>0</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Section: Live Tools -->
+          <div class="sidebar-section">
+            <div class="sidebar-label">Live Capabilities</div>
+            <div class="tools-grid">
+              <button class="tool-item" data-tool="search" title="Search the web with Tavily">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="m21 21-4.3-4.3" />
+                </svg>
+                <span>Web Search</span>
+              </button>
+              <button class="tool-item" data-tool="weather" title="Query live city weather">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
+                </svg>
+                <span>Weather</span>
+              </button>
+              <button class="tool-item" data-tool="crypto" title="Check live crypto prices">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                </svg>
+                <span>Crypto Rates</span>
+              </button>
+              <button class="tool-item" data-tool="calc" title="Perform safe math calculations">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <rect width="16" height="20" x="4" y="2" rx="2" />
+                  <line x1="8" x2="16" y1="6" y2="6" />
+                  <line x1="16" x2="16" y1="14" y2="18" />
+                  <path d="M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01" />
+                </svg>
+                <span>Calculator</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sidebar Footer -->
+        <div class="sidebar-footer">
+          <button class="tool-btn" data-dialog="settings" title="System settings & theme appearance">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+            <span class="nav-text">Settings &amp; Theme</span>
+            <span class="theme-dot" id="sidebar-theme-dot" title="Active theme"></span>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ============================ MAIN ============================ -->
+    <main class="main">
+      <!-- Top bar (menu button + conversation title) -->
+      <header class="topbar">
+        <button id="sidebar-open" class="icon-btn sidebar-open-btn" aria-label="Open sidebar" title="Open sidebar">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <rect width="18" height="18" x="3" y="3" rx="2" />
+            <path d="M9 3v18" />
+            <path d="m13 9 3 3-3 3" />
+          </svg>
+        </button>
+        <span id="topbar-title" class="topbar-title">New conversation</span>
+      </header>
+
+      <!-- Due reminders banner -->
+      <div id="due-banner" class="due-banner" hidden></div>
+
+      <!-- Scrollable conversation -->
+      <div id="chat-scroll" class="chat-scroll">
+        <div class="chat-column">
+          <!-- Empty state hero -->
+          <div id="hero" class="hero">
+            <img src="/assets/logo_hero.png" alt="ContextAI" class="hero-logo" />
+            <h1 class="hero-title">How can I help you today?</h1>
+            <p class="hero-subtitle">ContextAI is equipped with short-term &amp; semantic memory, live tools for
+              calculations, weather, crypto, web search, and document RAG.</p>
+            <div class="starter-grid">
+              <button class="starter-card" data-prompt="What is the weather in Tokyo?">What is the weather in
+                Tokyo?</button>
+              <button class="starter-card" data-prompt="What is the price of Bitcoin?">What is the price of
+                Bitcoin?</button>
+              <button class="starter-card" data-prompt="Calculate (250 * 15) / 2">Calculate (250 × 15) ÷ 2</button>
+              <button class="starter-card" data-prompt="Search the web for Python 3.13 features">Search the web for
+                Python 3.13 features</button>
+            </div>
+          </div>
+
+          <!-- Messages render here -->
+          <div id="messages" class="messages"></div>
+        </div>
+      </div>
+
+      <!-- Composer -->
+      <div class="composer-wrap">
+        <form id="composer" class="composer">
+          <textarea id="composer-input" rows="1"
+            placeholder="Ask ContextAI a question, search, calculate, or query documents…"
+            aria-label="Message ContextAI"></textarea>
+          <button type="submit" id="composer-send" class="send-btn" aria-label="Send message" disabled>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 19V5m-7 7 7-7 7 7" />
+            </svg>
+          </button>
+        </form>
+        <p class="composer-hint">ContextAI can make mistakes. Verify important information.</p>
+      </div>
+    </main>
+  </div>
+
+
+  <!-- ============================ DIALOGS ============================ -->
+  <dialog id="dialog-documents" class="modal">
+    <div class="modal-head">
+      <h2>Documents &amp; Knowledge Base</h2>
+      <button class="icon-btn modal-close" data-close aria-label="Close"><svg viewBox="0 0 24 24" width="18" height="18"
+          fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M18 6 6 18M6 6l12 12" />
+        </svg></button>
+    </div>
+    <p class="modal-caption">Upload local PDF files to expand ContextAI's semantic document retrieval knowledge base.
+    </p>
+    <div class="upload-row">
+      <input type="file" id="pdf-input" accept="application/pdf" />
+      <button id="pdf-upload-btn" class="primary-btn" disabled>Index PDF into Knowledge Base</button>
+    </div>
+    <div id="pdf-status" class="modal-status" hidden></div>
+    <hr class="modal-divider" />
+    <div class="stat-grid">
+      <div class="stat">
+        <div class="stat-value" id="doc-chunk-count">0</div>
+        <div class="stat-label">Total Indexed Chunks</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">document_rag</div>
+        <div class="stat-label">Vector Collection</div>
+      </div>
+    </div>
+    <p class="modal-note">You can ask questions about your uploaded documents in any chat session. The agent will cite
+      page numbers.</p>
+  </dialog>
+
+  <dialog id="dialog-memory" class="modal">
+    <div class="modal-head">
+      <h2>Persistent Memory</h2>
+      <button class="icon-btn modal-close" data-close aria-label="Close"><svg viewBox="0 0 24 24" width="18" height="18"
+          fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M18 6 6 18M6 6l12 12" />
+        </svg></button>
+    </div>
+    <p class="modal-caption">ContextAI continuously manages two persistent memory layers for your user session.</p>
+    <div class="stat-grid">
+      <div class="stat">
+        <div class="stat-title">Short-Term History</div>
+        <div class="stat-desc">Maintained in SQLite. Retains recent messages chronologically for conversation
+          continuity.</div>
+      </div>
+      <div class="stat">
+        <div class="stat-title">Semantic Long-Term</div>
+        <div class="stat-desc">Maintained in ChromaDB. Automatically indexes personal preferences, facts, and notes.
+        </div>
+      </div>
+    </div>
+    <hr class="modal-divider" />
+    <h3 class="modal-subhead">Clear History</h3>
+    <p class="modal-caption">Reset your SQLite conversation history while preserving indexed document RAG collections.
+    </p>
+    <button id="clear-memory-btn" class="primary-btn">Clear Conversation History</button>
+    <div id="memory-status" class="modal-status" hidden></div>
+  </dialog>
+
+  <dialog id="dialog-reminders" class="modal">
+    <div class="modal-head">
+      <h2>Reminders</h2>
+      <button class="icon-btn modal-close" data-close aria-label="Close"><svg viewBox="0 0 24 24" width="18" height="18"
+          fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M18 6 6 18M6 6l12 12" />
+        </svg></button>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-tab="active">Active</button>
+      <button class="tab" data-tab="new">New Reminder</button>
+      <button class="tab" data-tab="completed">Completed</button>
+    </div>
+    <div id="tab-active" class="tab-panel"></div>
+    <div id="tab-new" class="tab-panel" hidden>
+      <input type="text" id="reminder-text" class="text-input" placeholder="e.g. Call dentist, submit report…" />
+      <div class="reminder-datetime">
+        <input type="date" id="reminder-date" class="text-input" />
+        <input type="time" id="reminder-time" class="text-input" value="12:00" />
+      </div>
+      <button id="reminder-create-btn" class="primary-btn">Schedule Reminder</button>
+      <div id="reminder-status" class="modal-status" hidden></div>
+    </div>
+    <div id="tab-completed" class="tab-panel" hidden></div>
+  </dialog>
+
+  <dialog id="dialog-settings" class="modal">
+    <div class="modal-head">
+      <h2>Settings &amp; System</h2>
+      <button class="icon-btn modal-close" data-close aria-label="Close"><svg viewBox="0 0 24 24" width="18" height="18"
+          fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M18 6 6 18M6 6l12 12" />
+        </svg></button>
+    </div>
+
+    <!-- Appearance / Theme -->
+    <h3 class="modal-subhead">Appearance &amp; Theme</h3>
+    <p class="modal-caption">Select an accent color. The interface retains its dark AI aesthetic while updating buttons,
+      highlights, and borders.</p>
+    <div class="theme-picker" id="theme-picker">
+      <button type="button" class="theme-option" data-theme="blue" title="Blue accent">
+        <span class="theme-swatch theme-blue"></span>
+        <span class="theme-name">Blue</span>
+      </button>
+      <button type="button" class="theme-option" data-theme="purple" title="Purple accent">
+        <span class="theme-swatch theme-purple"></span>
+        <span class="theme-name">Purple</span>
+      </button>
+      <button type="button" class="theme-option" data-theme="cyan" title="Cyan accent">
+        <span class="theme-swatch theme-cyan"></span>
+        <span class="theme-name">Cyan</span>
+      </button>
+      <button type="button" class="theme-option" data-theme="green" title="Green accent">
+        <span class="theme-swatch theme-green"></span>
+        <span class="theme-name">Green</span>
+      </button>
+      <button type="button" class="theme-option" data-theme="pink" title="Pink accent">
+        <span class="theme-swatch theme-pink"></span>
+        <span class="theme-name">Pink</span>
+      </button>
+    </div>
+
+    <hr class="modal-divider" />
+    <h3 class="modal-subhead">System Configuration</h3>
+    <p class="modal-caption">Backend Endpoint: <code id="settings-backend-url"></code></p>
+    <div id="settings-health" class="modal-status"></div>
+    <hr class="modal-divider" />
+    <h3 class="modal-subhead">Reasoning Stack</h3>
+    <ul class="stack-list">
+      <li><b>Framework:</b> FastAPI + LangGraph Orchestration</li>
+      <li><b>Intent Classifier:</b> TF-IDF + Logistic Regression</li>
+      <li><b>LLM Provider:</b> Gemini via LiteLLM</li>
+      <li><b>Memory:</b> SQLite Short-Term + ChromaDB Semantic Long-Term</li>
+      <li><b>Tools:</b> OpenWeather, CoinGecko, Calculator AST, Tavily Search, PyMuPDF RAG</li>
+    </ul>
+  </dialog>
+
+  <!-- Toast -->
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+  <script src="/app.js"></script>
+</body>
+
+</html>
