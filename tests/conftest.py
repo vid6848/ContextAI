@@ -24,6 +24,7 @@ def isolate_test_storage(tmp_path, monkeypatch):
     graph._default_tavily_tool = None
     graph._default_rag_pipeline = None
     routes._compiled_agent = None
+    routes._default_reminder_manager = None
 
     yield
 
@@ -36,3 +37,4 @@ def isolate_test_storage(tmp_path, monkeypatch):
     graph._default_tavily_tool = None
     graph._default_rag_pipeline = None
     routes._compiled_agent = None
+    routes._default_reminder_manager = None
