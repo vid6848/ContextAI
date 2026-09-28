@@ -74,3 +74,29 @@ def test_chat_endpoint_llm_unavailable_returns_503(mock_generate):
     assert "Gemini is temporarily unavailable" in data["detail"]
 
 
+def test_serve_static_frontend_index():
+    """Verify root / serves the web frontend index.html."""
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "text/html" in response.headers.get("content-type", "")
+    assert "ContextAI" in response.text
+    assert "composer" in response.text
+
+
+def test_serve_static_frontend_styles_and_scripts():
+    """Verify /styles.css and /app.js are served correctly."""
+    css_resp = client.get("/styles.css")
+    assert css_resp.status_code == 200
+    assert "text/css" in css_resp.headers.get("content-type", "")
+
+    js_resp = client.get("/app.js")
+    assert js_resp.status_code == 200
+    assert "application/javascript" in js_resp.headers.get("content-type", "")
+
+
+def test_serve_static_assets():
+    """Verify static assets such as logo images are mounted and reachable."""
+    resp = client.get("/assets/logo.png")
+    assert resp.status_code == 200
+
+
