@@ -21,7 +21,10 @@ export interface MessageMeta {
   sources?: Source[] | null
   steps?: AgentStep[]
   stopped?: boolean
+  feedback?: Feedback
 }
+
+export type Feedback = "up" | "down"
 
 export interface ChatMessage {
   /** Server id; undefined until the server has saved the message. */
