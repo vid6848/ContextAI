@@ -34,6 +34,7 @@ def local(dt):
         ("next friday 9am", "2026-10-30 09:00"),
         ("Monday morning", "2026-10-26 09:00"),
         ("2026-12-01T10:00", "2026-12-01 10:00"),
+        ("9am", "2026-10-24 09:00"),           # already past today, so tomorrow
     ],
 )
 def test_natural_language_times_resolve_in_the_users_timezone(phrase, expected_local):
@@ -137,3 +138,9 @@ def test_model_can_create_and_list_reminders_from_chat(monkeypatch):
 
     reminders = client.get("/api/v1/reminders", params={"user_id": "chat1"}).json()["reminders"]
     assert [(r["reminder_text"], r["timezone"]) for r in reminders] == [("Call mom", TZ)]
+
+
+def test_parse_preview_endpoint():
+    ok = client.get("/api/v1/reminders/parse", params={"when": "2030-05-01T18:00", "timezone": TZ}).json()
+    assert ok["due_at"].startswith("2030-05-01T12:30")
+    assert client.get("/api/v1/reminders/parse", params={"when": "whenever-ish"}).json() == {"due_at": None}

@@ -91,6 +91,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ reminder_text, scheduled_time, timezone, user_id: userId }),
     }),
+  parseWhen: (when: string) =>
+    request<{ due_at: string | null }>(
+      `/reminders/parse?when=${encodeURIComponent(when)}&timezone=${encodeURIComponent(timezone)}`,
+    ).then((r) => r.due_at),
   dueReminders: () => request<{ reminders: Reminder[] }>("/reminders/due").then((r) => r.reminders),
   markNotified: (id: number) => request(`/reminders/${id}/notified`, { method: "PATCH" }),
   completeReminder: (id: number) => request(`/reminders/${id}/complete`, { method: "PATCH" }),

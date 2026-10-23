@@ -27,6 +27,7 @@ from src.backend.llm.client import LLMServiceUnavailableError
 from src.backend.memory.extractor import update_long_term_memory
 from src.backend.memory.sql_db import DEFAULT_CONVERSATION_TITLE
 from src.backend.reminders.reminder_manager import ReminderManager
+from src.backend.reminders.timeparse import parse_when
 
 logger = logging.getLogger(__name__)
 
@@ -571,6 +572,16 @@ def get_reminders(
     mgr = get_reminder_manager()
     reminders = mgr.get_reminders(user_id=user_id, status=status)
     return {"success": True, "reminders": reminders}
+
+
+@router.get("/reminders/parse")
+def parse_reminder_time(
+    when: str = Query(..., min_length=1, max_length=120),
+    timezone: str | None = Query(default=None, max_length=64),
+):
+    """Preview how a time like "friday at 6" will be understood, before saving a reminder."""
+    due = parse_when(when, timezone)
+    return {"due_at": due.isoformat() if due else None}
 
 
 @router.get("/reminders/due")

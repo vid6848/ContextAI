@@ -126,6 +126,15 @@ function RemindersDialog({ open, onClose }: { open: boolean; onClose: () => void
   const [reminders, setReminders] = useState<Reminder[]>([])
   const [text, setText] = useState("")
   const [when, setWhen] = useState("")
+  // Live preview of how the typed time is understood: undefined = not checked yet, null = not understood
+  const [preview, setPreview] = useState<string | null | undefined>(undefined)
+  useEffect(() => {
+    if (!when.trim()) return
+    const timer = setTimeout(() => {
+      api.parseWhen(when).then(setPreview).catch(() => setPreview(undefined))
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [when])
   const [permission, setPermission] = useState(() => ("Notification" in window ? Notification.permission : "denied"))
 
   // Captured when the list loads, so "overdue" is computed without reading the clock during render
@@ -152,6 +161,7 @@ function RemindersDialog({ open, onClose }: { open: boolean; onClose: () => void
       await api.createReminder(text, when)
       setText("")
       setWhen("")
+      setPreview(undefined)
       toast.success("Reminder added")
       refresh()
     } catch (err) {
@@ -184,15 +194,23 @@ function RemindersDialog({ open, onClose }: { open: boolean; onClose: () => void
           <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Call the dentist" aria-label="Reminder" />
           <Input
             value={when}
-            onChange={(e) => setWhen(e.target.value)}
+            onChange={(e) => {
+              setWhen(e.target.value)
+              setPreview(undefined)
+            }}
             placeholder="tomorrow at 5pm"
             aria-label="When"
+            aria-describedby="when-preview"
             className="sm:w-48"
           />
-          <Button type="submit" disabled={!text.trim() || !when}>
+          <Button type="submit" disabled={!text.trim() || !when.trim() || preview === null}>
             Add
           </Button>
         </form>
+        <p id="when-preview" aria-live="polite" className={cn("-mt-1 min-h-5 text-sm", preview === null ? "text-step-error" : "text-muted-foreground")}>
+          {when.trim() && preview ? `→ ${formatWhen(preview)}` : null}
+          {when.trim() && preview === null ? "Couldn't understand that time. Try “tomorrow at 9am”." : null}
+        </p>
         <ul className="max-h-72 divide-y overflow-y-auto">
           {reminders.length === 0 && <li className="py-3 text-sm text-muted-foreground">No reminders yet.</li>}
           {reminders.map((r) => {
