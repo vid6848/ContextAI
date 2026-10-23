@@ -42,8 +42,9 @@ htmlcov/
 tests/
 
 # Local databases and vector stores (mount persistent volume instead)
-data/chroma/
-data/contextai.db
+# Runtime data: databases, vector store and the generated push (VAPID) private key
+data/*
+!data/.gitkeep
 *.sqlite
 *.sqlite3
 *.db
