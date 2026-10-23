@@ -10,8 +10,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -47,3 +47,7 @@ data/contextai.db
 .idea/
 .DS_Store
 Thumbs.db
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
