@@ -12,6 +12,11 @@ describe("linkCitations", () => {
     expect(linkCitations(text, 2)).toBe(text)
   })
 
+  it("splits grouped citations like [1, 3]", () => {
+    expect(linkCitations("In 2027 [1, 3].", 3)).toBe("In 2027 [1](#cite-1)[3](#cite-3).")
+    expect(linkCitations("Bad group [1, 9]", 3)).toBe("Bad group [1, 9]")
+  })
+
   it("is a no-op without sources", () => {
     expect(linkCitations("[1]", 0)).toBe("[1]")
   })

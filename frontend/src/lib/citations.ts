@@ -9,9 +9,10 @@ export function linkCitations(markdown: string, sourceCount: number): string {
     .map((part, i) =>
       i % 2 === 1
         ? part
-        : part.replace(/\[(\d{1,2})\](?![(:])/g, (match, num: string) => {
-            const n = Number(num)
-            return n >= 1 && n <= sourceCount ? `[${n}](#cite-${n})` : match
+        : part.replace(/\[(\d{1,2}(?:\s*,\s*\d{1,2})*)\](?![(:])/g, (match, nums: string) => {
+            // [2] and grouped forms like [1, 3]
+            const ns = nums.split(",").map((x) => Number(x.trim()))
+            return ns.every((n) => n >= 1 && n <= sourceCount) ? ns.map((n) => `[${n}](#cite-${n})`).join("") : match
           }),
     )
     .join("")

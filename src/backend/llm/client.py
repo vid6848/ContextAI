@@ -308,3 +308,60 @@ class LLMClient:
         raise LLMServiceUnavailableError(
             "The AI model is temporarily unavailable. Please try again in a moment."
         ) from last_error
+
+    def chat_round(
+        self,
+        messages: list[Any],
+        tools: list[dict[str, Any]] | None = None,
+        cancel_event: threading.Event | None = None,
+    ) -> Iterator[tuple[str, Any]]:
+        """One model turn with optional function calling, streamed.
+
+        Yields ("token", text) for answer text as it arrives, then exactly one ("message", dict): the full
+        assistant message, including any tool_calls, ready to append to `messages` for the next round.
+        Retries and fallback apply only before the first token, as in stream_response.
+        """
+        self._require_api_key()
+        models = [self.model_name]
+        if self.fallback_model_name and self.fallback_model_name != self.model_name:
+            models.append(self.fallback_model_name)
+
+        last_error: Exception | None = None
+        for model in models:
+            for attempt in range(self.max_retries + 1):
+                started = False
+                chunks: list[Any] = []
+                try:
+                    kwargs: dict[str, Any] = {"model": model, "messages": messages, "api_key": self.api_key,
+                                              "stream": True}
+                    if tools:
+                        kwargs["tools"] = tools
+                    for chunk in litellm.completion(**kwargs):
+                        if cancel_event is not None and cancel_event.is_set():
+                            break
+                        chunks.append(chunk)
+                        delta = chunk.choices[0].delta.content if chunk.choices else None
+                        if delta:
+                            started = True
+                            yield ("token", delta)
+                    built = litellm.stream_chunk_builder(chunks, messages=messages) if chunks else None
+                    message = (
+                        built.choices[0].message.model_dump(exclude_none=True)
+                        if built
+                        else {"role": "assistant", "content": ""}
+                    )
+                    yield ("message", message)
+                    return
+                except Exception as exc:
+                    if started or not is_transient_error(exc):
+                        raise
+                    last_error = exc
+                    if attempt < self.max_retries:
+                        delay = (self.base_delay * (2 ** attempt)) + random.uniform(0.05, 0.25)
+                        logger.warning("Transient error in chat round with %s: %s", model, type(exc).__name__)
+                        time.sleep(delay)
+            logger.warning("Model %s unavailable for chat round: %s", model, type(last_error).__name__)
+
+        raise LLMServiceUnavailableError(
+            "The AI model is temporarily unavailable. Please try again in a moment."
+        ) from last_error

@@ -4,6 +4,7 @@ import json
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import date
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
@@ -11,7 +12,9 @@ from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 
 from src.backend.agent.state import AgentState
+from src.backend.agent.toolbox import TOOL_LABELS, TOOL_SPECS, ToolBox
 from src.backend.classifier.intent_classifier import IntentClassifier
+from src.backend.core.config import settings
 from src.backend.llm.client import LLMClient
 from src.backend.memory.sql_db import SQLiteManager
 from src.backend.memory.vector_store import ChromaMemoryStore
@@ -194,12 +197,62 @@ def agent_step(step_id: str, label: str) -> Iterator[dict[str, Any]]:
         writer({"type": "step", **step})
 
 
+def answer_cards(state: AgentState) -> list[dict[str, Any]]:
+    """Cards for the UI: every successful weather/crypto result, from either routing path."""
+    if state.get("cards"):
+        return state["cards"]
+    card = tool_card(state)
+    return [{"tool": state["tool_name"], "output": card}] if card else []
+
+
 def tool_card(state: AgentState) -> dict[str, Any] | None:
     """Structured tool result for the UI card, when the tool has one and succeeded."""
     result = state.get("tool_result") or {}
     if state.get("tool_name") in CARD_TOOLS and result.get("success"):
         return result
     return None
+
+
+def choose_route(confidence: float) -> str:
+    """Hybrid routing: trust the cheap classifier only when it's confident, else let the LLM pick tools."""
+    if settings.router_mode == "classifier":
+        return "classifier"
+    if settings.router_mode == "llm":
+        return "llm"
+    return "classifier" if confidence >= settings.hybrid_confidence_threshold else "llm"
+
+
+AGENT_SYSTEM_PROMPT = (
+    "You are ContextAI, a helpful personal assistant. Today is {today}.\n"
+    "You can call tools: a calculator, current weather, live crypto prices, web search, and a search over "
+    "the PDFs the user uploaded. Call a tool whenever the answer depends on live data, exact arithmetic, "
+    "recent facts or the user's documents. When a question has several parts, call several tools at once. "
+    "Never invent tool results; if a tool fails, say so briefly and answer what you can.\n"
+    "Search results can be out of date: compare any dates you find with today's date, treat earlier dates as "
+    "past events, and say so when the question is about the future.\n"
+    "Web and document results are numbered. " + "{citations}"
+)
+
+
+def build_chat_messages(state: AgentState) -> list[dict[str, Any]]:
+    """System prompt (with long-term memories), prior turns as real chat messages, then the new message."""
+    system = AGENT_SYSTEM_PROMPT.format(today=date.today().isoformat(), citations=CITATION_RULES)
+    memories = state.get("semantic_memories") or []
+    if memories:
+        system += "\n\nThings the user told you before (use them when relevant):\n" + "\n".join(
+            f"- {m}" for m in memories
+        )
+    messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
+    for m in state.get("conversation_history") or []:
+        role = "assistant" if m.get("role") == "assistant" else "user"
+        messages.append({"role": role, "content": m.get("message", "")})
+    messages.append({"role": "user", "content": _extract_message(state)})
+    return messages
+
+
+def _tool_names(calls: list[dict[str, Any]]) -> str:
+    names = list(dict.fromkeys(TOOL_LABELS.get(c["function"]["name"], ("", c["function"]["name"]))[1] for c in calls))
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
 
 
 def _extract_message(state: AgentState) -> str:
@@ -306,17 +359,32 @@ def build_agent_graph(
             else:
                 pred = active_classifier.predict(message)
                 intent, confidence = pred.intent, pred.confidence
-                step["label"] = f"Classified intent: {intent} ({confidence:.0%})"
-                step["detail"] = {"intent": intent, "confidence": round(confidence, 3)}
+                route = choose_route(confidence)
+                step["detail"] = {"intent": intent, "confidence": round(confidence, 3), "route": route}
+                step["label"] = (
+                    f"Classified intent: {intent} ({confidence:.0%})"
+                    if route == "classifier"
+                    else f"Letting the model choose tools (classifier guessed {intent}, {confidence:.0%})"
+                )
+                return {
+                    "intent": intent,
+                    "current_intent": intent,
+                    "confidence": confidence,
+                    "route": route,
+                    "steps": [step],
+                }
         return {
             "intent": intent,
             "current_intent": intent,
             "confidence": confidence,
+            "route": "classifier",
             "steps": [step],
         }
 
     def route_by_intent(state: AgentState) -> str:
-        """Route to appropriate tool node or directly to generate_response."""
+        """Route to the LLM tool agent, a fixed tool node, or directly to generate_response."""
+        if state.get("route") == "llm":
+            return "llm_agent"
         intent = (state.get("intent") or state.get("current_intent") or "GENERAL").upper()
         if intent == "CALCULATOR":
             return "calculator"
@@ -392,6 +460,93 @@ def build_agent_graph(
             "document_chunks": chunks,
             "rag_sources": sources,
             "steps": [step],
+        }
+
+    def llm_agent_node(state: AgentState, config: RunnableConfig) -> dict:
+        """Function-calling loop: the model picks tools (possibly several, over several rounds), then answers.
+
+        Each model round is a "plan" step and each tool call its own step, so the trace shows the chain.
+        """
+        configurable = config.get("configurable", {}) if config else {}
+        cancel_event = configurable.get("cancel_event")
+        writer = get_stream_writer()
+        active_llm = llm_client or get_default_llm_client()
+        toolbox = ToolBox(
+            calculator=calculator_tool or get_default_calculator_tool(),
+            weather=weather_tool or get_default_weather_tool(),
+            crypto=crypto_tool or get_default_crypto_tool(),
+            web=tavily_tool or get_default_tavily_tool(),
+            rag=rag_pipeline or get_default_rag_pipeline(),
+            user_id=state.get("user_id") or "default_user",
+        )
+        messages = build_chat_messages(state)
+        steps: list[dict[str, Any]] = []
+        tools_used: list[str] = []
+        answer: list[str] = []
+
+        for round_no in range(settings.max_tool_rounds + 1):
+            # The last round withholds tools so the model has to answer
+            tools = TOOL_SPECS if round_no < settings.max_tool_rounds else None
+            plan = {"id": f"plan:{round_no}", "status": "running",
+                    "label": "Deciding how to answer" if round_no == 0 else "Reading the results"}
+            writer({"type": "step", **plan})
+            started = time.perf_counter()
+            message: dict[str, Any] = {}
+            for kind, payload in active_llm.chat_round(messages, tools=tools, cancel_event=cancel_event):
+                if kind == "token":
+                    if plan["status"] == "running":
+                        plan.update(status="done", label="Answering directly" if round_no == 0 else plan["label"],
+                                    duration_ms=round((time.perf_counter() - started) * 1000))
+                        writer({"type": "step", **plan})
+                    answer.append(payload)
+                    writer({"type": "token", "text": payload})
+                else:
+                    message = payload
+            calls = message.get("tool_calls") or []
+            if plan["status"] == "running":
+                plan.update(status="done", duration_ms=round((time.perf_counter() - started) * 1000),
+                            label=f"Decided to use {_tool_names(calls)}" if calls else plan["label"])
+                if calls:
+                    plan["detail"] = {
+                        "calls": [
+                            {"tool": c["function"]["name"], "arguments": c["function"].get("arguments")}
+                            for c in calls
+                        ]
+                    }
+                writer({"type": "step", **plan})
+            steps.append(plan)
+
+            if not calls or (cancel_event and cancel_event.is_set()):
+                break
+            messages.append(message)
+            for i, call in enumerate(calls):
+                name = call["function"]["name"]
+                running, display = TOOL_LABELS.get(name, ("Running a tool", name))
+                try:
+                    args = json.loads(call["function"].get("arguments") or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+                with agent_step(f"tool:{name}:{round_no}.{i}", running) as step:
+                    result, for_model = toolbox.run(name, args)
+                    ok = bool(result.get("success"))
+                    error = result.get("error", "unknown error")
+                    step["label"] = f"Used {display}" if ok else f"{display} failed: {error}"
+                    step["failed"] = not ok
+                    step["detail"] = {"input": args, "output": _compact(result)}
+                steps.append(step)
+                tools_used.append(name)
+                messages.append({"role": "tool", "tool_call_id": call.get("id"), "name": name, "content": for_model})
+
+        response_text = "".join(answer)
+        return {
+            "response": response_text,
+            "final_response": response_text,
+            "stopped": bool(cancel_event and cancel_event.is_set()),
+            "steps": steps,
+            "tools_used": tools_used,
+            "tool_name": tools_used[0] if tools_used else None,
+            "rag_sources": toolbox.sources,
+            "cards": toolbox.cards,
         }
 
     def generate_response_node(state: AgentState, config: RunnableConfig) -> dict:
@@ -520,6 +675,8 @@ def build_agent_graph(
                     "tool_used": state.get("tool_name"),
                     "sources": state.get("rag_sources"),
                     "tool_output": tool_card(state),
+                    "cards": answer_cards(state),
+                    "tools_used": state.get("tools_used") or ([state["tool_name"]] if state.get("tool_name") else []),
                     "steps": state.get("steps") or [],
                     "stopped": bool(state.get("stopped")),
                 },
@@ -539,6 +696,7 @@ def build_agent_graph(
     workflow.add_node("web_search", web_search_node)
     workflow.add_node("document_rag", document_rag_node)
     workflow.add_node("generate_response", generate_response_node)
+    workflow.add_node("llm_agent", llm_agent_node)
     workflow.add_node("save_memory", save_memory_node)
 
     # Register edges
@@ -556,6 +714,7 @@ def build_agent_graph(
             "web_search": "web_search",
             "document_rag": "document_rag",
             "generate_response": "generate_response",
+            "llm_agent": "llm_agent",
         },
     )
 
@@ -568,6 +727,7 @@ def build_agent_graph(
 
     # Final response generation proceeds to save_memory and END
     workflow.add_edge("generate_response", "save_memory")
+    workflow.add_edge("llm_agent", "save_memory")
     workflow.add_edge("save_memory", END)
 
     return workflow
