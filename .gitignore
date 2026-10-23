@@ -39,8 +39,9 @@ htmlcov/
 *.sqlite
 *.sqlite3
 *.db
-data/chroma/
-data/contextai.db
+# Runtime data: databases, vector store and the generated push (VAPID) private key
+data/*
+!data/.gitkeep
 
 # IDE and OS files
 .vscode/
