@@ -9,9 +9,33 @@ export interface AgentStep {
   detail?: unknown
 }
 
+/** A citable source: a passage from the user's PDFs or a web search result. `n` matches [n] in the answer. */
 export interface Source {
-  document: string
-  page: number
+  n?: number
+  kind?: "document" | "web"
+  document?: string
+  page?: number
+  title?: string
+  url?: string
+  excerpt?: string
+}
+
+export interface WeatherOutput {
+  location: string
+  temperature: number
+  feels_like?: number
+  humidity?: number
+  condition?: string
+  description?: string
+  wind_speed?: number
+  units?: "celsius" | "fahrenheit"
+}
+
+export interface CryptoOutput {
+  coin: string
+  price_usd: number
+  change_24h_percent?: number | null
+  market_cap_usd?: number | null
 }
 
 export interface MessageMeta {
@@ -19,6 +43,8 @@ export interface MessageMeta {
   confidence?: number | null
   tool_used?: string | null
   sources?: Source[] | null
+  /** Structured result of the weather/crypto tool, rendered as a card. */
+  tool_output?: Record<string, unknown> | null
   steps?: AgentStep[]
   stopped?: boolean
   feedback?: Feedback
