@@ -7,7 +7,20 @@
 /* ---------------------------------------------------------------- config */
 const BACKEND_URL = (window.CONTEXTAI_BACKEND_URL || "").replace(/\/$/, "");
 const API = `${BACKEND_URL}/api/v1`;
-const USER_ID = "default_user";
+// Anonymous per-browser identity until real sign-in lands (issue #17)
+const USER_ID = (() => {
+  const KEY = "contextai_user_id";
+  try {
+    let id = localStorage.getItem(KEY);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(KEY, id);
+    }
+    return id;
+  } catch (_) {
+    return crypto.randomUUID();
+  }
+})();
 const THEME_STORAGE_KEY = "contextai_accent_theme";
 const SIDEBAR_STORAGE_KEY = "contextai_sidebar_collapsed";
 
@@ -104,7 +117,7 @@ async function loadConversations() {
 }
 
 function fromServerMessage(m) {
-  const msg = { role: m.role, content: m.message };
+  const msg = { id: m.id, role: m.role, content: m.message };
   if (m.role === "assistant" && m.metadata) msg.details = m.metadata;
   return msg;
 }
@@ -290,38 +303,117 @@ function scrollToBottom() {
   chatScroll.scrollTop = chatScroll.scrollHeight;
 }
 
-function buildAgentDetails(details) {
-  if (!details || (!details.intent && !details.tool_used)) return null;
-  const wrap = document.createElement("div");
-  wrap.className = "agent-details";
+const ICONS = {
+  chevron: `<svg class="chevron" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg>`,
+  check: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`,
+  cross: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>`,
+  copy: `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="13" height="13" x="9" y="9" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
+  regenerate: `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>`,
+  edit: `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`,
+  send: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5m-7 7 7-7 7 7" /></svg>`,
+  stop: `<svg viewBox="0 0 24 24" width="14" height="14"><rect x="5" y="5" width="14" height="14" rx="2.5" fill="currentColor"/></svg>`,
+};
 
-  const toggle = document.createElement("button");
-  toggle.className = "agent-details-toggle";
-  toggle.innerHTML = `<svg class="chevron" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg> Agent details`;
-  toggle.addEventListener("click", () => wrap.classList.toggle("open"));
+function formatMs(ms) {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
+}
 
-  const body = document.createElement("div");
-  body.className = "agent-details-body";
-  const conf = typeof details.confidence === "number" ? details.confidence.toFixed(2) : "0.00";
-  let html = `
-    <span class="tag">Intent: <b>${escapeHtml(details.intent || "GENERAL")}</b></span>
-    <span class="tag">Confidence: <b>${conf}</b></span>
-    <span class="tag">Tool: <b>${escapeHtml(details.tool_used || "None")}</b></span>`;
-  if (Array.isArray(details.sources) && details.sources.length) {
-    html += `<div class="source-list"><b>Document sources:</b><ul>`;
-    for (const s of details.sources) {
-      html += `<li><code>${escapeHtml(s.document || "Document")}</code> — Page ${escapeHtml(String(s.page ?? 1))}</li>`;
-    }
-    html += `</ul></div>`;
+function stepIcon(status) {
+  if (status === "running") return `<span class="step-spinner" aria-label="Running"></span>`;
+  if (status === "error") return `<span class="step-icon err">${ICONS.cross}</span>`;
+  return `<span class="step-icon ok">${ICONS.check}</span>`;
+}
+
+/* Collapsible agent timeline: open while the answer streams, collapsed to a one-line summary after. */
+function buildAgentSteps(msg) {
+  const details = msg.details || {};
+  const steps = details.steps || [];
+  if (!steps.length && !details.intent) return null;
+
+  const wrap = document.createElement("details");
+  wrap.className = "agent-steps";
+  wrap.open = msg.streaming || !!msg.stepsOpen;
+  wrap.addEventListener("toggle", () => { if (!msg.streaming) msg.stepsOpen = wrap.open; });
+
+  const summary = document.createElement("summary");
+  if (msg.streaming) {
+    const running = steps.find((s) => s.status === "running");
+    const label = running ? running.label : steps.length ? "Writing response" : "Thinking";
+    summary.innerHTML = `<span class="step-spinner"></span><span>${escapeHtml(label)}…</span>`;
+  } else {
+    const total = steps.reduce((t, s) => t + (s.duration_ms || 0), 0);
+    const tool = details.tool_used ? ` · ${escapeHtml(details.tool_used.replace("_", " "))}` : "";
+    summary.innerHTML = steps.length
+      ? `${ICONS.chevron}<span>${steps.length} steps · ${formatMs(total)}${tool}</span>`
+      : `${ICONS.chevron}<span>Agent details</span>`;
   }
-  body.innerHTML = html;
+  wrap.appendChild(summary);
 
-  wrap.append(toggle, body);
+  const list = document.createElement("ol");
+  list.className = "step-list";
+  for (const s of steps) {
+    const li = document.createElement("li");
+    li.className = `step step-${s.status}`;
+    const head = document.createElement("button");
+    head.type = "button";
+    head.className = "step-head";
+    head.innerHTML = `${stepIcon(s.status)}<span class="step-label">${escapeHtml(s.label)}</span>` +
+      (s.duration_ms != null ? `<span class="step-time">${formatMs(s.duration_ms)}</span>` : "");
+    li.appendChild(head);
+    if (s.detail && s.status !== "running") {
+      const pre = document.createElement("pre");
+      pre.className = "step-detail";
+      pre.hidden = true;
+      pre.textContent = JSON.stringify(s.detail, null, 2);
+      head.classList.add("expandable");
+      head.addEventListener("click", () => { pre.hidden = !pre.hidden; });
+      li.appendChild(pre);
+    }
+    list.appendChild(li);
+  }
+  wrap.appendChild(list);
+
+  if (!msg.streaming && details.intent) {
+    const meta = document.createElement("div");
+    meta.className = "step-meta";
+    const conf = typeof details.confidence === "number" ? `${Math.round(details.confidence * 100)}%` : "–";
+    let html = `<span class="tag">Intent: <b>${escapeHtml(details.intent)}</b></span>` +
+      `<span class="tag">Confidence: <b>${conf}</b></span>`;
+    if (Array.isArray(details.sources) && details.sources.length) {
+      html += `<div class="source-list"><b>Document sources:</b><ul>`;
+      for (const s of details.sources) {
+        html += `<li><code>${escapeHtml(s.document || "Document")}</code> — Page ${escapeHtml(String(s.page ?? 1))}</li>`;
+      }
+      html += `</ul></div>`;
+    }
+    meta.innerHTML = html;
+    wrap.appendChild(meta);
+  }
   return wrap;
 }
 
+function actionButton(icon, label, onClick) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "msg-action";
+  b.innerHTML = icon;
+  b.title = label;
+  b.setAttribute("aria-label", label);
+  b.addEventListener("click", onClick);
+  return b;
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("Copied to clipboard");
+  } catch (_) {
+    toast("Could not copy");
+  }
+}
+
 function buildSuggestions(msg, isLast) {
-  if (!isLast || msg.role !== "assistant" || msg.error) return null;
+  if (!isLast || msg.role !== "assistant" || msg.error || msg.streaming) return null;
   const lastUser = [...currentChat().messages].reverse().find((m) => m.role === "user");
   const suggestions = getSuggestedFollowups(
     lastUser ? lastUser.content : "",
@@ -348,6 +440,113 @@ function buildSuggestions(msg, isLast) {
   return wrap;
 }
 
+function startEditing(idx) {
+  const chat = currentChat();
+  const msg = chat.messages[idx];
+  const row = msg.el;
+  if (!row || sending) return;
+
+  const box = document.createElement("div");
+  box.className = "edit-box";
+  const ta = document.createElement("textarea");
+  ta.value = msg.content;
+  ta.rows = Math.min(8, msg.content.split("\n").length + 1);
+  const buttons = document.createElement("div");
+  buttons.className = "edit-buttons";
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "ghost-btn";
+  cancel.textContent = "Cancel";
+  cancel.addEventListener("click", () => renderMessages());
+  const save = document.createElement("button");
+  save.type = "button";
+  save.className = "primary-btn";
+  save.textContent = "Send";
+  save.addEventListener("click", () => {
+    const v = ta.value.trim();
+    if (v) sendMessage(v, { replaceIndex: idx });
+  });
+  ta.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); save.click(); }
+    if (e.key === "Escape") { e.stopPropagation(); cancel.click(); }
+  });
+  buttons.append(cancel, save);
+  box.append(ta, buttons);
+  row.replaceWith(box);
+  msg.el = box;
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+}
+
+function regenerate(assistantIdx) {
+  const userIdx = assistantIdx - 1;
+  const user = currentChat().messages[userIdx];
+  if (user && user.role === "user") sendMessage(user.content, { replaceIndex: userIdx });
+}
+
+function buildMessageEl(msg, idx, chat) {
+  const isLast = idx === chat.messages.length - 1;
+  if (msg.role === "user") {
+    const row = document.createElement("div");
+    row.className = "msg-user-row";
+    const bubble = document.createElement("div");
+    bubble.className = "msg-user";
+    bubble.textContent = msg.content;
+    const actions = document.createElement("div");
+    actions.className = "msg-actions";
+    actions.append(
+      actionButton(ICONS.copy, "Copy message", () => copyText(msg.content)),
+      actionButton(ICONS.edit, "Edit message", () => startEditing(idx))
+    );
+    row.append(bubble, actions);
+    return row;
+  }
+
+  const el = document.createElement("div");
+  el.className = "msg-assistant";
+  const steps = buildAgentSteps(msg);
+  if (steps) el.appendChild(steps);
+
+  const body = document.createElement("div");
+  body.className = "msg-body";
+  if (msg.content) body.innerHTML = renderMarkdown(msg.content);
+  if (msg.streaming) {
+    const caret = document.createElement("span");
+    caret.className = "stream-caret";
+    (body.lastElementChild || body).appendChild(caret);
+  }
+  el.appendChild(body);
+
+  if (msg.details?.stopped) {
+    const note = document.createElement("div");
+    note.className = "stopped-note";
+    note.textContent = "Stopped";
+    el.appendChild(note);
+  }
+  if (msg.errorDetail) {
+    const err = document.createElement("div");
+    err.className = "error-note";
+    err.innerHTML = `<b>Service notice</b>${escapeHtml(msg.errorDetail)}`;
+    el.appendChild(err);
+  }
+  if (!msg.streaming) {
+    const actions = document.createElement("div");
+    actions.className = "msg-actions assistant";
+    if (msg.content) actions.appendChild(actionButton(ICONS.copy, "Copy response", () => copyText(msg.content)));
+    if (isLast && !sending) {
+      actions.appendChild(actionButton(ICONS.regenerate, msg.error ? "Retry" : "Regenerate response", () => regenerate(idx)));
+    }
+    el.appendChild(actions);
+  }
+  const sugs = buildSuggestions(msg, isLast);
+  if (sugs) el.appendChild(sugs);
+  return el;
+}
+
+function isNearBottom() {
+  return chatScroll.scrollHeight - chatScroll.scrollTop - chatScroll.clientHeight < 120;
+}
+
 function renderMessages() {
   const chat = currentChat();
   messagesEl.innerHTML = "";
@@ -357,31 +556,27 @@ function renderMessages() {
   if (!hasMessages) return;
 
   chat.messages.forEach((msg, idx) => {
-    if (msg.role === "user") {
-      const el = document.createElement("div");
-      el.className = "msg-user";
-      el.textContent = msg.content;
-      messagesEl.appendChild(el);
-    } else {
-      const el = document.createElement("div");
-      el.className = "msg-assistant";
-      const body = document.createElement("div");
-      body.innerHTML = renderMarkdown(msg.content);
-      el.appendChild(body);
-      const details = buildAgentDetails(msg.details);
-      if (details) el.appendChild(details);
-      if (msg.errorDetail) {
-        const err = document.createElement("div");
-        err.className = "error-note";
-        err.innerHTML = `<b>Service notice</b>${escapeHtml(msg.errorDetail)}`;
-        el.appendChild(err);
-      }
-      const sugs = buildSuggestions(msg, idx === chat.messages.length - 1);
-      if (sugs) el.appendChild(sugs);
-      messagesEl.appendChild(el);
-    }
+    msg.el = buildMessageEl(msg, idx, chat);
+    messagesEl.appendChild(msg.el);
   });
   scrollToBottom();
+}
+
+/* Re-render only the streaming message, at most once per frame. */
+let pendingFrame = null;
+function scheduleMessageUpdate(msg) {
+  if (pendingFrame) return;
+  pendingFrame = requestAnimationFrame(() => {
+    pendingFrame = null;
+    const chat = currentChat();
+    const idx = chat.messages.indexOf(msg);
+    if (idx < 0 || !msg.el) return;
+    const stick = isNearBottom();
+    const el = buildMessageEl(msg, idx, chat);
+    msg.el.replaceWith(el);
+    msg.el = el;
+    if (stick) scrollToBottom();
+  });
 }
 
 function renderAll() {
@@ -390,77 +585,150 @@ function renderAll() {
 }
 
 /* ---------------------------------------------------------------- chat API */
-async function apiChat(message) {
-  try {
-    const resp = await fetch(`${API}/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, user_id: USER_ID, conversation_id: currentId }),
-    });
-    if (resp.ok) return await resp.json();
+/* POST to the SSE endpoint and dispatch each `event:` to handlers[event](data). */
+async function streamChat(payload, signal, handlers) {
+  const resp = await fetch(`${API}/chat/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal,
+  });
+  if (!resp.ok) {
     let detail = resp.statusText;
-    try { detail = (await resp.json()).detail || detail; } catch (_) {}
-    return { _error: true, _status: resp.status, _detail: String(detail) };
-  } catch (err) {
-    return { _error: true, _status: 0, _detail: `Unable to connect to the ContextAI backend. ${err.message || err}` };
+    try {
+      const body = await resp.json();
+      detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+    } catch (_) {}
+    handlers.error({ detail: detail || `Request failed (${resp.status})` });
+    return;
+  }
+
+  const reader = resp.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += value;
+    let boundary;
+    while ((boundary = buffer.indexOf("\n\n")) >= 0) {
+      const raw = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      let event = "message";
+      let data = "";
+      for (const line of raw.split("\n")) {
+        if (line.startsWith("event: ")) event = line.slice(7);
+        else if (line.startsWith("data: ")) data += line.slice(6);
+      }
+      if (data && handlers[event]) handlers[event](JSON.parse(data));
+    }
   }
 }
 
-async function sendMessage(text) {
+let activeController = null;
+
+function setStreamingUI(on) {
+  sendBtn.classList.toggle("is-stop", on);
+  sendBtn.innerHTML = on ? ICONS.stop : ICONS.send;
+  sendBtn.setAttribute("aria-label", on ? "Stop generating" : "Send message");
+  sendBtn.title = on ? "Stop generating (Esc)" : "Send message";
+  sendBtn.disabled = on ? false : composerInput.value.trim() === "";
+}
+
+function stopGenerating() {
+  if (activeController) activeController.abort();
+}
+
+async function reloadMessages(chat) {
+  if (!chat.id || sending) return;
+  try {
+    const resp = await fetch(`${API}/conversations/${chat.id}/messages?${userQuery()}`);
+    if (!resp.ok) return;
+    chat.messages = (await resp.json()).messages.map(fromServerMessage);
+    if (currentChat() === chat) renderMessages();
+  } catch (_) { /* keep local copy */ }
+}
+
+/* Send a message, or with replaceIndex: edit/regenerate from that user message onward. */
+async function sendMessage(text, opts = {}) {
   const clean = (text || "").trim();
   if (!clean || sending) return;
-  sending = true;
-  sendBtn.disabled = true;
-
   const chat = currentChat();
-  chat.messages.push({ role: "user", content: clean });
+
+  let replaceFromId = null;
+  if (opts.replaceIndex != null) {
+    replaceFromId = chat.messages[opts.replaceIndex]?.id ?? null;
+    chat.messages.splice(opts.replaceIndex);
+  }
+
+  sending = true;
+  activeController = new AbortController();
+  setStreamingUI(true);
+
+  const userMsg = { role: "user", content: clean };
+  const reply = { role: "assistant", content: "", streaming: true, details: { steps: [] } };
+  chat.messages.push(userMsg, reply);
   renderAll();
 
-  // Thinking indicator
-  const thinking = document.createElement("div");
-  thinking.className = "msg-assistant";
-  thinking.innerHTML = `<span class="thinking"><span class="thinking-dots"><span></span><span></span><span></span></span>Thinking…</span>`;
-  messagesEl.appendChild(thinking);
-  scrollToBottom();
-
-  const data = await apiChat(clean);
-  thinking.remove();
-
-  if (data && data._error) {
-    const transient = data._status === 503 || /temporarily unavailable/i.test(data._detail);
-    const userMsg = transient
-      ? "Gemini is temporarily unavailable. Please try again in a moment."
-      : "Something went wrong while processing that request. Please try again.";
-    chat.messages.push({ role: "assistant", content: userMsg, error: true, errorDetail: data._detail });
-  } else if (data) {
-    if (!chat.id) {
-      // First message of a draft: the server created the conversation
-      chat.id = data.conversation_id;
-      conversations[chat.id] = chat;
-      currentId = chat.id;
+  try {
+    await streamChat(
+      { message: clean, user_id: USER_ID, conversation_id: chat.id, replace_from_message_id: replaceFromId },
+      activeController.signal,
+      {
+        meta(d) {
+          if (!chat.id) {
+            chat.id = d.conversation_id;
+            chat.title = d.title;
+            conversations[chat.id] = chat;
+            currentId = chat.id;
+            topbarTitle.textContent = chat.title;
+            renderConversationList();
+          }
+        },
+        step(d) {
+          const steps = reply.details.steps;
+          const i = steps.findIndex((s) => s.id === d.id);
+          if (i >= 0) steps[i] = d;
+          else steps.push(d);
+          scheduleMessageUpdate(reply);
+        },
+        token(d) {
+          reply.content += d.text;
+          scheduleMessageUpdate(reply);
+        },
+        done(d) {
+          const { user_message_id, assistant_message_id, ...details } = d;
+          Object.assign(reply.details, details);
+          userMsg.id = user_message_id;
+          reply.id = assistant_message_id;
+        },
+        error(d) {
+          reply.error = true;
+          reply.errorDetail = d.detail;
+          if (!reply.content) reply.content = "Sorry, I couldn't complete that response.";
+        },
+      }
+    );
+  } catch (err) {
+    if (err.name === "AbortError") {
+      reply.details.stopped = true;
+    } else {
+      reply.error = true;
+      if (!reply.content) reply.content = "I couldn't reach the ContextAI backend. Please check that it's running.";
+      reply.errorDetail = String(err.message || err);
     }
-    chat.messages.push({
-      role: "assistant",
-      content: data.response || "I could not generate a response.",
-      details: {
-        intent: data.intent || "GENERAL",
-        confidence: typeof data.confidence === "number" ? data.confidence : 0,
-        tool_used: data.tool_used || null,
-        sources: data.sources || null,
-      },
-    });
-  } else {
-    chat.messages.push({
-      role: "assistant",
-      content: "I am currently unable to reach the ContextAI reasoning engine. Please ensure the FastAPI backend is running.",
-      error: true,
-    });
+  } finally {
+    if (pendingFrame) { cancelAnimationFrame(pendingFrame); pendingFrame = null; }
+    reply.streaming = false;
+    sending = false;
+    activeController = null;
+    setStreamingUI(false);
+    renderAll();
   }
 
   await loadConversations();
-  sending = false;
-  sendBtn.disabled = composerInput.value.trim() === "";
-  renderAll();
+  renderConversationList();
+  // A stopped answer is saved server-side once generation halts; fetch it to learn the message ids
+  if (reply.details.stopped) setTimeout(() => reloadMessages(chat), 1500);
 }
 
 /* ---------------------------------------------------------------- composer */
@@ -471,16 +739,23 @@ function autogrow() {
 
 composerInput.addEventListener("input", () => {
   autogrow();
-  sendBtn.disabled = sending || composerInput.value.trim() === "";
+  if (!sending) sendBtn.disabled = composerInput.value.trim() === "";
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && sending) stopGenerating();
 });
 composerInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
-    $("#composer").requestSubmit();
+    if (!sending) $("#composer").requestSubmit();
   }
 });
 $("#composer").addEventListener("submit", (e) => {
   e.preventDefault();
+  if (sending) {
+    stopGenerating();
+    return;
+  }
   const v = composerInput.value;
   composerInput.value = "";
   autogrow();
@@ -526,7 +801,7 @@ pdfInput.addEventListener("change", () => { pdfBtn.disabled = !pdfInput.files.le
 
 async function refreshDocCount() {
   try {
-    const resp = await fetch(`${API}/documents`);
+    const resp = await fetch(`${API}/documents?${userQuery()}`);
     const data = resp.ok ? await resp.json() : null;
     const count = data ? data.total_chunks ?? 0 : 0;
     $("#doc-chunk-count").textContent = count;
@@ -547,7 +822,7 @@ pdfBtn.addEventListener("click", async () => {
   try {
     const fd = new FormData();
     fd.append("file", file);
-    const resp = await fetch(`${API}/documents/upload`, { method: "POST", body: fd });
+    const resp = await fetch(`${API}/documents/upload?${userQuery()}`, { method: "POST", body: fd });
     const data = await resp.json();
     if (resp.ok && data.success) {
       pdfStatus.className = "modal-status ok";
@@ -576,8 +851,11 @@ $("#clear-memory-btn").addEventListener("click", async () => {
     });
     if (resp.ok) {
       status.className = "modal-status ok";
-      status.textContent = "Your conversation memory has been cleared successfully.";
-      toast("Conversation memory cleared");
+      status.textContent = "Your conversations and memories have been cleared.";
+      toast("Conversations and memories cleared");
+      conversations = {};
+      createConversation();
+      renderAll();
     } else {
       status.className = "modal-status err";
       status.textContent = "Failed to clear conversation memory.";
@@ -623,7 +901,7 @@ function reminderRow(r, done) {
     okBtn.textContent = "✓";
     okBtn.title = "Mark completed";
     okBtn.addEventListener("click", async () => {
-      await fetch(`${API}/reminders/${r.id}/complete?user_id=${USER_ID}`, { method: "PATCH" });
+      await fetch(`${API}/reminders/${r.id}/complete?${userQuery()}`, { method: "PATCH" });
       refreshReminders();
       checkDueReminders();
     });
@@ -633,7 +911,7 @@ function reminderRow(r, done) {
   delBtn.textContent = "🗑";
   delBtn.title = "Delete";
   delBtn.addEventListener("click", async () => {
-    await fetch(`${API}/reminders/${r.id}?user_id=${USER_ID}`, { method: "DELETE" });
+    await fetch(`${API}/reminders/${r.id}?${userQuery()}`, { method: "DELETE" });
     refreshReminders();
     checkDueReminders();
   });

@@ -1,5 +1,7 @@
 """Document RAG pipeline for PDF text extraction, chunking, and ChromaDB vector retrieval."""
 
+import hashlib
+import logging
 import os
 from typing import Any
 
@@ -7,6 +9,8 @@ import chromadb
 import pymupdf
 
 from src.backend.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def chunk_text(text: str, chunk_size: int = 500, chunk_overlap: int = 50) -> list[str]:
@@ -70,26 +74,37 @@ class DocumentRAGPipeline:
             metadata={"description": "ContextAI PDF document RAG knowledgebase"},
         )
 
-    def count(self) -> int:
-        """Return total number of chunks currently indexed."""
+    def count(self, user_id: str | None = None) -> int:
+        """Return number of indexed chunks, optionally only those owned by user_id."""
         if self.collection is None:
             self.initialize()
-        return self.collection.count()
+        if user_id is None:
+            return self.collection.count()
+        return len(self.collection.get(where={"user_id": user_id}, include=[])["ids"])
 
     def ingest_pdf(
         self,
         file_path: str,
         chunk_size: int = 500,
         chunk_overlap: int = 50,
+        user_id: str | None = None,
+        document_name: str | None = None,
     ) -> dict[str, Any]:
-        """Extract text from a PDF file with PyMuPDF, chunk it, and store with metadata in ChromaDB."""
+        """Extract text from a PDF file with PyMuPDF, chunk it, and store with metadata in ChromaDB.
+
+        Chunks are tagged with user_id (when given) so retrieval can be scoped per user, and ids are
+        derived from the file's content hash so re-uploading the same PDF replaces rather than duplicates.
+        """
         if self.collection is None:
             self.initialize()
 
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"PDF file not found at: {file_path}")
 
-        doc_name = os.path.basename(file_path)
+        doc_name = document_name or os.path.basename(file_path)
+        with open(file_path, "rb") as fh:
+            document_id = hashlib.sha256(fh.read()).hexdigest()[:16]
+        id_prefix = f"{user_id or 'shared'}_{document_id}"
         documents_to_add: list[str] = []
         metadatas_to_add: list[dict[str, Any]] = []
         ids_to_add: list[str] = []
@@ -108,21 +123,22 @@ class DocumentRAGPipeline:
 
                 page_chunks = chunk_text(page_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
                 for chunk_idx, chunk in enumerate(page_chunks):
-                    chunk_id = f"{doc_name}_p{page_num}_c{chunk_idx}"
-                    documents_to_add.append(chunk)
-                    metadatas_to_add.append({
+                    metadata: dict[str, Any] = {
                         "document_name": doc_name,
+                        "document_id": document_id,
                         "page_number": page_num,
                         "chunk_index": chunk_idx,
-                        "file_path": os.path.abspath(file_path),
-                    })
-                    ids_to_add.append(chunk_id)
+                    }
+                    if user_id:
+                        metadata["user_id"] = user_id
+                    documents_to_add.append(chunk)
+                    metadatas_to_add.append(metadata)
+                    ids_to_add.append(f"{id_prefix}_p{page_num}_c{chunk_idx}")
 
             pdf_doc.close()
 
             if documents_to_add:
-                # Add in batches to ChromaDB if needed
-                self.collection.add(
+                self.collection.upsert(
                     documents=documents_to_add,
                     metadatas=metadatas_to_add,
                     ids=ids_to_add,
@@ -134,25 +150,27 @@ class DocumentRAGPipeline:
                 "total_pages": total_pages,
                 "total_chunks": len(documents_to_add),
             }
-        except Exception as err:
+        except Exception:
+            logger.exception("Failed to ingest PDF %s", doc_name)
             return {
                 "success": False,
                 "document_name": doc_name,
-                "error": f"Failed to ingest PDF: {err}",
+                "error": "Failed to read this PDF. It may be corrupted, encrypted, or image-only.",
             }
 
-    def retrieve(self, query: str, limit: int = 4) -> list[dict[str, Any]]:
-        """Perform semantic search for query over indexed document chunks."""
+    def retrieve(self, query: str, limit: int = 4, user_id: str | None = None) -> list[dict[str, Any]]:
+        """Perform semantic search over indexed chunks, restricted to user_id's documents when given."""
         if self.collection is None:
             self.initialize()
 
-        total = self.collection.count()
+        total = self.count(user_id)
         if total == 0:
             return []
 
         results = self.collection.query(
             query_texts=[query],
             n_results=min(limit, total),
+            where={"user_id": user_id} if user_id else None,
         )
 
         chunks: list[dict[str, Any]] = []
