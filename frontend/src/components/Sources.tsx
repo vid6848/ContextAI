@@ -57,19 +57,24 @@ export function SourcesPanel() {
     activeRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" })
   }, [open?.active, open?.messageKey])
 
-  const web = sources[0]?.kind === "web"
+  const kinds = new Set(sources.map((s) => s.kind ?? "document"))
   return (
     <Sheet open={!!open} onOpenChange={(o) => !o && close()}>
       <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-md">
         <SheetHeader className="border-b">
           <SheetTitle>Sources</SheetTitle>
           <SheetDescription>
-            {web ? "Web pages this answer is based on." : "Passages from your documents this answer is based on."}
+            {kinds.size > 1
+              ? "Passages from your documents and web pages this answer is based on."
+              : kinds.has("web")
+                ? "Web pages this answer is based on."
+                : "Passages from your documents this answer is based on."}
           </SheetDescription>
         </SheetHeader>
         <ol className="flex-1 space-y-3 overflow-y-auto p-4">
           {sources.map((s) => {
             const active = s.n === open?.active
+            const web = s.kind === "web"
             return (
               <li
                 key={s.n}

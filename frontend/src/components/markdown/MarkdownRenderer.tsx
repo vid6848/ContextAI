@@ -16,7 +16,8 @@ import { CodeBlock } from "./CodeBlock"
 export interface CitationProps {
   /** Number of sources; [n] markers up to this count become clickable. */
   count: number
-  kind: "document" | "web"
+  /** Kind of source n, so document and web citations keep their own colours in one answer. */
+  kindOf: (n: number) => "document" | "web"
   onCite: (n: number) => void
 }
 
@@ -38,7 +39,7 @@ export default function MarkdownRenderer({ content, citations }: { content: stri
                 aria-label={`Show source ${cite}`}
                 className={cn(
                   "mx-0.5 inline-flex h-[1.125rem] min-w-[1.125rem] -translate-y-px items-center justify-center rounded-md px-1 align-middle text-[0.6875rem] font-medium tabular-nums no-underline transition-colors",
-                  citations.kind === "web"
+                  citations.kindOf(cite) === "web"
                     ? "bg-step-route/10 text-step-route hover:bg-step-route/20"
                     : "bg-step-docs/10 text-step-docs hover:bg-step-docs/20",
                 )}

@@ -152,19 +152,26 @@ export function AssistantMessage({ message, isLast }: { message: ChatMessage; is
   const showSources = useCitations((s) => s.show)
   const metaSources = message.meta?.sources
   const sources = metaSources ?? []
-  const sourceKind = sources[0]?.kind === "web" ? "web" : "document"
+  const webSources = useMemo(() => (metaSources ?? []).filter((s) => s.kind === "web"), [metaSources])
   // Only numbered sources (answers since citations shipped) get clickable [n] markers
   const citations = useMemo(() => {
     if (!metaSources?.length || metaSources[0].n == null) return undefined
-    const kind = metaSources[0].kind === "web" ? ("web" as const) : ("document" as const)
-    return { count: metaSources.length, kind, onCite: (n: number) => showSources(message.key, n) }
+    const kindOf = (n: number) => (metaSources[n - 1]?.kind === "web" ? ("web" as const) : ("document" as const))
+    return { count: metaSources.length, kindOf, onCite: (n: number) => showSources(message.key, n) }
   }, [metaSources, showSources, message.key])
 
   return (
     <div className="group">
       <AgentTrace meta={message.meta} streaming={waiting} />
-      <ToolCard tool={message.meta?.tool_used} output={message.meta?.tool_output} />
-      {sourceKind === "web" && sources.length > 0 && <WebSourceStrip sources={sources} messageKey={message.key} />}
+      {(message.meta?.cards?.length
+        ? message.meta.cards
+        : message.meta?.tool_output
+          ? [{ tool: message.meta.tool_used ?? "", output: message.meta.tool_output }]
+          : []
+      ).map((card, i) => (
+        <ToolCard key={i} tool={card.tool} output={card.output} />
+      ))}
+      {webSources.length > 0 && <WebSourceStrip sources={webSources} messageKey={message.key} />}
       {message.content && <Markdown content={message.content} streaming={message.streaming} citations={citations} />}
 
       {message.meta?.stopped && <p className="mt-2 text-sm text-muted-foreground">You stopped this answer.</p>}
