@@ -1,12 +1,14 @@
 """Tests for LangGraph Tool Routing and Document RAG integration."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+
 import pymupdf
+
 from src.backend.agent.graph import get_agent_app
 from src.backend.rag.pipeline import DocumentRAGPipeline
 from src.backend.tools.calculator import CalculatorTool
-from src.backend.tools.weather import WeatherTool
 from src.backend.tools.crypto import CryptoTool
+from src.backend.tools.weather import WeatherTool
 from src.backend.tools.web_search import TavilySearchTool
 
 
@@ -130,7 +132,9 @@ def test_routing_document_rag_with_indexed_document(tmp_path):
     pdf_path = str(tmp_path / "handbook.pdf")
     doc = pymupdf.open()
     page = doc.new_page()
-    page.insert_text((50, 50), "ContextAI Security Protocol. Multi-factor authentication is mandatory on all admin portals.")
+    page.insert_text(
+        (50, 50), "ContextAI Security Protocol. Multi-factor authentication is mandatory on all admin portals."
+    )
     doc.save(pdf_path)
     doc.close()
 

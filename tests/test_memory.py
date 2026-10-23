@@ -1,10 +1,10 @@
 """Tests for SQLite conversation memory and ChromaDB semantic memory layers."""
 
 from unittest.mock import MagicMock
-import pytest
+
+from src.backend.agent.graph import get_agent_app, is_user_specific_memory
 from src.backend.memory.sql_db import SQLiteManager
 from src.backend.memory.vector_store import ChromaMemoryStore
-from src.backend.agent.graph import get_agent_app, is_user_specific_memory
 
 
 def test_sqlite_init_db(tmp_path):

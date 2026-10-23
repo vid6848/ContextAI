@@ -1,8 +1,9 @@
 """Tests for LangGraph agent workflow."""
 
 from unittest.mock import MagicMock
-from src.backend.agent.state import AgentState
+
 from src.backend.agent.graph import build_agent_graph, get_agent_app
+from src.backend.agent.state import AgentState
 
 
 def test_agent_state_keys():

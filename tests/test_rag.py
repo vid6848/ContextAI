@@ -1,7 +1,8 @@
 """Tests for Document RAG Pipeline using PyMuPDF and ChromaDB."""
 
-import pytest
 import pymupdf
+import pytest
+
 from src.backend.rag.pipeline import DocumentRAGPipeline, chunk_text
 
 

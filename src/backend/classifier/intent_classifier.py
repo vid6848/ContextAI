@@ -1,6 +1,7 @@
 """Intent classification component using TF-IDF + Logistic Regression."""
 
 from typing import Any, NamedTuple
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (

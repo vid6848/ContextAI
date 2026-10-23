@@ -1,8 +1,9 @@
 """Tests for LLM client integration, reliability, retry with backoff, and fallback handling."""
 
 from unittest.mock import MagicMock, patch
-import pytest
+
 import litellm
+import pytest
 
 from src.backend.llm.client import (
     LLMClient,

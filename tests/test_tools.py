@@ -1,11 +1,11 @@
 """Tests for Calculator, Weather, Crypto, and Tavily web search tools."""
 
-from unittest.mock import patch, MagicMock
-from src.backend.tools.calculator import CalculatorTool, extract_math_expression
-from src.backend.tools.weather import WeatherTool, extract_city_from_query
-from src.backend.tools.crypto import CryptoTool, extract_coin_from_query
-from src.backend.tools.web_search import TavilySearchTool
+from unittest.mock import MagicMock, patch
 
+from src.backend.tools.calculator import CalculatorTool, extract_math_expression
+from src.backend.tools.crypto import CryptoTool, extract_coin_from_query
+from src.backend.tools.weather import WeatherTool, extract_city_from_query
+from src.backend.tools.web_search import TavilySearchTool
 
 # ============================================================================
 # Calculator Tool Tests
