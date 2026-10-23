@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +19,12 @@ class Settings(BaseSettings):
 
     openweather_api_key: str = ""
     tavily_api_key: str = ""
+
+    # Tool routing: "hybrid" uses the TF-IDF classifier when it's confident and lets the LLM choose
+    # (and chain) tools otherwise; "llm" always uses function calling; "classifier" never does.
+    router_mode: Literal["hybrid", "llm", "classifier"] = "hybrid"
+    hybrid_confidence_threshold: float = 0.8
+    max_tool_rounds: int = 4
 
     # Abuse protection (per client IP, per minute) and upload size cap
     rate_limit_chat_per_minute: int = 20

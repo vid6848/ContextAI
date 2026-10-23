@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from src.backend.agent.graph import (
+    answer_cards,
     get_agent_app,
     get_default_llm_client,
     get_default_rag_pipeline,
@@ -357,6 +358,8 @@ async def chat_stream_endpoint(request: ChatRequest):
                 "tool_used": final.get("tool_name"),
                 "sources": final.get("rag_sources"),
                 "tool_output": tool_card(final),
+                "cards": answer_cards(final),
+                "tools_used": final.get("tools_used") or ([final["tool_name"]] if final.get("tool_name") else []),
                 "stopped": bool(final.get("stopped")),
                 "user_message_id": final.get("user_message_id"),
                 "assistant_message_id": final.get("assistant_message_id"),

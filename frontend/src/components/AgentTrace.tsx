@@ -10,8 +10,8 @@ type StepKind = "memory" | "route" | "tool" | "docs" | "error"
 function stepKind(step: AgentStep): StepKind {
   if (step.status === "error") return "error"
   if (step.id === "memory") return "memory"
-  if (step.id === "intent") return "route"
-  if (step.id === "tool:document_rag") return "docs"
+  if (step.id === "intent" || step.id.startsWith("plan:")) return "route"
+  if (step.id.startsWith("tool:document_rag") || step.id.startsWith("tool:search_documents")) return "docs"
   return "tool"
 }
 
@@ -91,7 +91,7 @@ export function AgentTrace({
           {steps.map((step) => (
             <TraceStep key={step.id} step={step} />
           ))}
-          {!streaming && meta?.intent && (
+          {!streaming && meta?.intent && !steps.some((s) => s.id.startsWith("plan:")) && (
             <li className="pt-1 text-xs text-muted-foreground">
               Routed as {meta.intent.toLowerCase().replace("_", " ")}
               {typeof meta.confidence === "number" && ` with ${Math.round(meta.confidence * 100)}% confidence`}
