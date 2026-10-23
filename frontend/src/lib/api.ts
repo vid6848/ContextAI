@@ -1,3 +1,4 @@
+import { accessToken } from "./auth"
 import { parseSSE } from "./sse"
 import type { Conversation, DocumentInfo, Feedback, Memory, Reminder, StreamEvent } from "./types"
 
@@ -35,11 +36,21 @@ export class ApiError extends Error {
   }
 }
 
+/** Authorization header when signed in; guests are identified by user_id instead. */
+function authHeaders(): Record<string, string> {
+  const token = accessToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const sep = path.includes("?") ? "&" : "?"
   const resp = await fetch(`${API}${path}${sep}user_id=${encodeURIComponent(userId)}`, {
     ...init,
-    headers: init.body instanceof FormData ? init.headers : { "Content-Type": "application/json", ...init.headers },
+    headers: {
+      ...(init.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+      ...authHeaders(),
+      ...(init.headers as Record<string, string> | undefined),
+    },
   })
   if (!resp.ok) throw new ApiError(resp.status, await errorDetail(resp))
   return resp.json() as Promise<T>
@@ -117,6 +128,7 @@ export function uploadWithProgress(file: File, onProgress: (fraction: number) =>
   return new Promise<UploadResult>((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open("POST", `${API}/documents/upload?user_id=${encodeURIComponent(userId)}`)
+    for (const [k, v] of Object.entries(authHeaders())) xhr.setRequestHeader(k, v)
     xhr.responseType = "json"
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total)
     xhr.onload = () => {
@@ -144,7 +156,7 @@ export interface StreamRequest {
 export async function* streamChat(req: StreamRequest, signal: AbortSignal): AsyncGenerator<StreamEvent> {
   const resp = await fetch(`${API}/chat/stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ ...req, user_id: userId, timezone }),
     signal,
   })

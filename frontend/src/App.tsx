@@ -1,6 +1,7 @@
 import { Menu, PanelLeftOpen, SquarePen } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { Outlet, useLocation, useNavigate } from "react-router"
+import { toast } from "sonner"
 
 import { AppSidebar, type Panel } from "@/components/AppSidebar"
 import { BrandBackground } from "@/components/BrandBackground"
@@ -8,6 +9,7 @@ import { Panels } from "@/components/Panels"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { useReminderNotifications } from "@/hooks/useReminderNotifications"
+import { onIdentityChange, useAuth } from "@/lib/auth"
 import { useChat } from "@/store/chat"
 
 const COLLAPSED_KEY = "contextai_sidebar_collapsed"
@@ -32,6 +34,22 @@ export function AppLayout() {
   useEffect(() => {
     void loadConversations()
   }, [loadConversations])
+
+  // Signing in or out changes whose chats we show
+  const reset = useChat((s) => s.reset)
+  useEffect(
+    () =>
+      onIdentityChange((event, moved) => {
+        reset()
+        void loadConversations()
+        navigate("/chat")
+        if (event === "signed-in") toast.success(moved ? "Signed in. Your guest chats are in your account." : "Signed in")
+        else toast("Signed out")
+      }),
+    [reset, loadConversations, navigate],
+  )
+  const { ready: authReady, required: authRequired, session } = useAuth()
+  const mustSignIn = authReady && authRequired && !session
 
 
 
@@ -123,7 +141,7 @@ export function AppLayout() {
         <Outlet />
       </main>
 
-      <Panels open={panel} onClose={() => setPanel(null)} />
+      <Panels open={mustSignIn ? "signin" : panel} onClose={() => setPanel(null)} />
     </div>
   )
 }

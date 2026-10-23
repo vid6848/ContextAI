@@ -7,6 +7,7 @@ import { RouterProvider } from "react-router/dom"
 import { AppLayout } from "@/App"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { initAuth } from "@/lib/auth"
 import { registerServiceWorker } from "@/lib/push"
 import { ChatPage } from "@/pages/ChatPage"
 import { MemoryPage } from "@/pages/MemoryPage"
@@ -50,3 +51,4 @@ createRoot(document.getElementById("root")!).render(
 )
 
 registerServiceWorker()
+void initAuth()

@@ -4,6 +4,8 @@ import {
   FileText,
   Info,
   Keyboard,
+  LogIn,
+  LogOut,
   Monitor,
   Moon,
   MoreHorizontal,
@@ -33,13 +35,14 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useAuth } from "@/lib/auth"
 import { groupConversations } from "@/lib/dates"
 import { MOD } from "@/lib/platform"
 import type { Conversation } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { useChat } from "@/store/chat"
 
-export type Panel = "documents" | "reminders" | "memory" | "shortcuts"
+export type Panel = "documents" | "reminders" | "memory" | "shortcuts" | "signin"
 
 interface AppSidebarProps {
   onNavigate?: () => void
@@ -218,17 +221,41 @@ function ConversationRow({ conversation, onNavigate }: { conversation: Conversat
 function AccountMenu({ onOpenPanel }: { onOpenPanel: (panel: Panel) => void }) {
   const { theme, setTheme } = useTheme()
   const navigate = useNavigate()
+  const { enabled, session, signOut } = useAuth()
+  const user = session?.user
+  const meta = (user?.user_metadata ?? {}) as { full_name?: string; name?: string; avatar_url?: string }
+  const name = meta.full_name || meta.name || user?.email || "Guest"
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="h-10 w-full justify-start gap-2.5 px-2 text-[0.9rem] font-normal">
-          <span className="flex size-7 items-center justify-center rounded-full bg-sidebar-accent">
-            <UserRound className="size-4" />
+        <Button variant="ghost" className="h-11 w-full justify-start gap-2.5 px-2 text-[0.9rem] font-normal">
+          {meta.avatar_url ? (
+            <img src={meta.avatar_url} alt="" referrerPolicy="no-referrer" className="size-7 rounded-full" />
+          ) : (
+            <span
+              className={cn(
+                "flex size-7 items-center justify-center rounded-full",
+                user ? "bg-brand-gradient text-[0.8rem] font-semibold text-white" : "bg-sidebar-accent",
+              )}
+            >
+              {user ? name.slice(0, 1).toUpperCase() : <UserRound className="size-4" />}
+            </span>
+          )}
+          <span className="min-w-0 truncate text-left">
+            {name}
+            {!user && enabled && <span className="block text-xs text-muted-foreground">Sign in to sync</span>}
           </span>
-          Guest
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" className="w-60">
+      <DropdownMenuContent side="top" align="start" className="w-64">
+        {user ? (
+          <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">{user.email}</DropdownMenuLabel>
+        ) : enabled ? (
+          <DropdownMenuItem onSelect={() => onOpenPanel("signin")}>
+            <LogIn /> Sign in
+          </DropdownMenuItem>
+        ) : null}
+        {(user || enabled) && <DropdownMenuSeparator />}
         <DropdownMenuItem onSelect={() => navigate("/memory")}>
           <Brain /> Memory
         </DropdownMenuItem>
@@ -248,6 +275,11 @@ function AccountMenu({ onOpenPanel }: { onOpenPanel: (panel: Panel) => void }) {
         <DropdownMenuItem onSelect={() => navigate("/")}>
           <Info /> About ContextAI
         </DropdownMenuItem>
+        {user && (
+          <DropdownMenuItem onSelect={() => void signOut()}>
+            <LogOut /> Sign out
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Appearance</DropdownMenuLabel>
         <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
