@@ -60,9 +60,9 @@ export function AppSidebar({ onNavigate, onCollapse, onOpenPanel, searchRef }: A
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex items-center justify-between px-3 pt-3 pb-2">
-        <NavLink to="/" onClick={onNavigate} className="flex items-center gap-2 rounded-md px-1.5 py-1">
+        <NavLink to="/" onClick={onNavigate} title="ContextAI home" className="flex items-center gap-2 rounded-md px-1.5 py-1">
           <Logo className="size-[1.375rem]" />
-          <span className="text-[0.9375rem] font-semibold tracking-[-0.01em]">ContextAI</span>
+          <span className="font-display text-[1.1rem] font-semibold tracking-[-0.02em]">ContextAI</span>
         </NavLink>
         {onCollapse && (
           <Button variant="ghost" size="icon" onClick={onCollapse} aria-label="Close sidebar" className="text-muted-foreground">
@@ -76,7 +76,7 @@ export function AppSidebar({ onNavigate, onCollapse, onOpenPanel, searchRef }: A
           variant="ghost"
           className="h-9 w-full justify-start gap-2.5 px-2.5 text-[0.9rem] font-normal"
           onClick={() => {
-            navigate("/")
+            navigate("/chat")
             onNavigate?.()
           }}
         >
@@ -198,7 +198,7 @@ function ConversationRow({ conversation, onNavigate }: { conversation: Conversat
             onSelect={async () => {
               try {
                 await remove(conversation.id)
-                if (activeId === conversation.id) navigate("/")
+                if (activeId === conversation.id) navigate("/chat")
                 toast("Chat deleted")
               } catch {
                 toast.error("Couldn't delete the chat.")
@@ -237,7 +237,7 @@ function AccountMenu({ onOpenPanel }: { onOpenPanel: (panel: Panel) => void }) {
           <Keyboard /> Keyboard shortcuts
           <DropdownMenuShortcut>{MOD}/</DropdownMenuShortcut>
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => navigate("/welcome")}>
+        <DropdownMenuItem onSelect={() => navigate("/")}>
           <Info /> About ContextAI
         </DropdownMenuItem>
         <DropdownMenuSeparator />

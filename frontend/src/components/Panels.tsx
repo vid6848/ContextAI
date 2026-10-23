@@ -111,7 +111,7 @@ function ClearMemoryDialog({ open, onClose }: { open: boolean; onClose: () => vo
     try {
       await api.clearMemory()
       reset()
-      navigate("/")
+      navigate("/chat")
       toast.success("Chats and memory cleared")
       onClose()
     } catch {

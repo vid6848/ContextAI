@@ -10,7 +10,7 @@ export function NotFoundPage() {
       <h1 className="text-2xl font-medium">This page doesn't exist</h1>
       <p className="max-w-[40ch] text-muted-foreground">The link may be broken, or the chat was deleted.</p>
       <Button asChild className="mt-2 rounded-full px-5">
-        <Link to="/">Go to chats</Link>
+        <Link to="/chat">Go to chats</Link>
       </Button>
     </main>
   )
