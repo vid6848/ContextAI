@@ -140,6 +140,9 @@ def test_classifier_path_says_when_documents_dont_cover_the_question(monkeypatch
     with patch("src.backend.llm.client.LLMClient.generate_response") as llm:
         question = "What does the document say about the capital of France?"
         data = client.post("/api/v1/chat", json={"message": question, "user_id": "gate"}).json()
-    llm.assert_not_called()
+    # The answer itself needed no model call; the only call is the new chat's title
+    assert all(
+        c.kwargs["message"][0]["content"].startswith("Write a short title") for c in llm.call_args_list
+    )
     assert data["intent"] == "DOCUMENT"
     assert "couldn't find anything about that in your documents" in data["response"]

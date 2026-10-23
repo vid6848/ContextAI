@@ -56,6 +56,20 @@ def get_default_llm_client() -> LLMClient:
     return _default_llm_client
 
 
+_default_utility_llm: LLMClient | None = None
+
+
+def get_default_utility_llm() -> LLMClient:
+    """LLM for side tasks (titles, memory), on a different model so it has its own rate-limit quota."""
+    global _default_utility_llm
+    if _default_utility_llm is None:
+        _default_utility_llm = LLMClient(
+            model_name=settings.utility_model_name or settings.fallback_model_name,
+            fallback_model_name=settings.model_name,
+        )
+    return _default_utility_llm
+
+
 def get_default_sql_manager() -> SQLiteManager:
     """Get or initialize singleton instance of SQLiteManager."""
     global _default_sql_manager

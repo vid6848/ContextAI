@@ -15,16 +15,16 @@ from pydantic import BaseModel, Field
 from src.backend.agent.graph import (
     answer_cards,
     get_agent_app,
-    get_default_llm_client,
     get_default_rag_pipeline,
     get_default_sql_manager,
+    get_default_utility_llm,
     get_default_vector_store,
     tool_card,
 )
 from src.backend.core.config import settings
 from src.backend.core.rate_limit import rate_limit
 from src.backend.llm.client import LLMServiceUnavailableError
-from src.backend.memory.extractor import update_long_term_memory
+from src.backend.memory.extractor import needs_llm_title, post_turn
 from src.backend.memory.sql_db import DEFAULT_CONVERSATION_TITLE
 from src.backend.reminders.reminder_manager import ReminderManager
 from src.backend.reminders.timeparse import parse_when
@@ -148,28 +148,6 @@ def _title_from_message(message: str) -> str:
     return clean if len(clean) <= 60 else clean[:57].rstrip() + "…"
 
 
-TITLE_PROMPT = (
-    "Write a short title (2 to 6 words) for a chat that starts with the exchange below. "
-    "Use sentence case, no quotes, no trailing punctuation. Reply with the title only."
-)
-
-
-def generate_title(user_message: str, answer: str) -> str | None:
-    """Ask the LLM for a concise chat title; None if it fails or returns something unusable."""
-    try:
-        raw = get_default_llm_client().generate_response(
-            message=[
-                {"role": "system", "content": TITLE_PROMPT},
-                {"role": "user", "content": f"User: {user_message[:1000]}\n\nAssistant: {answer[:1000]}"},
-            ]
-        )
-    except Exception:
-        logger.warning("Title generation failed", exc_info=True)
-        return None
-    title = (raw or "").strip().splitlines()[0].strip().strip("\"'*#").rstrip(".").strip() if raw else ""
-    return title[:60] if 2 <= len(title) else None
-
-
 def _agent_input(request: ChatRequest, conversation: dict[str, Any]) -> dict[str, Any]:
     return {
         "message": request.message,
@@ -273,18 +251,34 @@ def delete_conversation(conversation_id: str, user_id: str = Query(default="defa
 # Chat Endpoints
 # ============================================================================
 
-def remember(request: ChatRequest, final: dict[str, Any]) -> list[dict[str, Any]]:
-    """Update long-term memory from the user's message after the reply exists, and note it on the reply."""
-    if settings.memory_mode != "llm" or not final.get("response") or final.get("stopped"):
-        return []
-    changes = update_long_term_memory(
-        get_default_llm_client(), get_default_vector_store(), request.user_id, request.message
+def after_reply(request: ChatRequest, final: dict[str, Any]) -> dict[str, Any]:
+    """Side tasks once the reply exists: update long-term memory and title a new chat (one utility call).
+
+    Returns {"changes": [...], "title": str | None}; both are persisted here.
+    """
+    if not final.get("response") or final.get("stopped"):
+        return {"changes": [], "title": None}
+    result = post_turn(
+        get_default_utility_llm(),
+        get_default_vector_store(),
+        request.user_id,
+        request.message,
+        final["response"],
+        want_title=request.conversation_id is None and needs_llm_title(request.message),
+        want_memory=settings.memory_mode == "llm",
     )
-    if changes and final.get("assistant_message_id") and final.get("conversation_id"):
-        get_default_sql_manager().update_message_metadata(
-            final["assistant_message_id"], final["conversation_id"], request.user_id, {"memory": changes}
+    sql = get_default_sql_manager()
+    conversation_id = final.get("conversation_id")
+    if result["changes"] and final.get("assistant_message_id") and conversation_id:
+        sql.update_message_metadata(
+            final["assistant_message_id"], conversation_id, request.user_id, {"memory": result["changes"]}
         )
-    return changes
+    renamed = result["title"] and conversation_id and sql.rename_conversation(
+        conversation_id, request.user_id, result["title"]
+    )
+    if not renamed:
+        result["title"] = None
+    return result
 
 
 @router.post("/chat", response_model=ChatResponse, dependencies=[Depends(chat_rate_limit)])
@@ -316,7 +310,7 @@ def chat_endpoint(request: ChatRequest, background: BackgroundTasks):
             status_code=502, detail="Something went wrong while generating a response. Please try again."
         ) from err
 
-    background.add_task(remember, request, result)
+    background.add_task(after_reply, request, result)
     return ChatResponse(
         conversation_id=conversation["id"],
         message=result.get("message", request.message),
@@ -388,14 +382,11 @@ async def chat_stream_endpoint(request: ChatRequest):
                 "user_message_id": final.get("user_message_id"),
                 "assistant_message_id": final.get("assistant_message_id"),
             })
-            changes = remember(request, final)
-            if changes:
-                publish({"type": "memory", "changes": changes})
-            # A brand-new chat gets a proper title once the first answer exists
-            if request.conversation_id is None and final.get("response") and not final.get("stopped"):
-                title = generate_title(request.message, final["response"])
-                if title and get_default_sql_manager().rename_conversation(conversation["id"], request.user_id, title):
-                    publish({"type": "title", "title": title})
+            extra = after_reply(request, final)
+            if extra["changes"]:
+                publish({"type": "memory", "changes": extra["changes"]})
+            if extra["title"]:
+                publish({"type": "title", "title": extra["title"]})
         except Exception as err:
             publish({"type": "error", "detail": _client_error_detail(err)})
         finally:

@@ -28,6 +28,7 @@ def isolate_test_storage(tmp_path, monkeypatch):
     # Reset singletons so they bind to the temporary test storage
     graph._default_sql_manager = None
     graph._default_llm_client = None
+    graph._default_utility_llm = None
     graph._default_reminder_manager = None
     graph._default_vector_store = None
     graph._default_calculator_tool = None
