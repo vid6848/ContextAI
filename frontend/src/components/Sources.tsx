@@ -30,7 +30,7 @@ export function WebSourceStrip({ sources, messageKey }: { sources: Source[]; mes
           <button
             type="button"
             onClick={() => show(messageKey, s.n)}
-            className="flex h-full w-full flex-col justify-between gap-2 rounded-xl border bg-card p-2.5 text-left hover:border-ring/50"
+            className="flex h-full w-full flex-col justify-between gap-2 rounded-xl border bg-card/85 p-2.5 text-left shadow-[0_12px_30px_-22px_rgb(30_20_90/0.4)] backdrop-blur-xl transition-colors hover:border-brand/40"
           >
             <span className="line-clamp-2 text-[0.8125rem] leading-snug">{s.title}</span>
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">

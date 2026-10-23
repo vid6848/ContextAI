@@ -118,7 +118,7 @@ export function UserMessage({ message }: { message: ChatMessage }) {
           ))}
         </ul>
       ) : null}
-      <div className="max-w-[85%] rounded-2xl rounded-br-md bg-secondary px-4 py-2.5 text-[1rem] leading-relaxed whitespace-pre-wrap">
+      <div className="max-w-[85%] rounded-2xl rounded-br-md border border-brand/15 bg-brand/[0.07] px-4 py-2.5 backdrop-blur text-[1rem] leading-relaxed whitespace-pre-wrap">
         {message.content}
       </div>
       <div className="mt-1 flex opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 max-md:opacity-100">

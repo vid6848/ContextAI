@@ -2,6 +2,7 @@ import { ArrowRight, Brain, CloudSun, FileSearch, Lock, Quote, Radio, Sparkles }
 import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router"
 
+import { BrandBackground } from "@/components/BrandBackground"
 import { DemoReplay } from "@/components/DemoReplay"
 import { Logo } from "@/components/Logo"
 import { Button } from "@/components/ui/button"
@@ -54,30 +55,6 @@ function Floating({
   )
 }
 
-function HeroBackground() {
-  return (
-    <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden" aria-hidden>
-      <div className="absolute -top-[20%] -left-[10%] size-[46rem] animate-drift rounded-full bg-step-memory/30 blur-[120px]" />
-      <div
-        className="absolute top-[10%] -right-[15%] size-[42rem] animate-drift rounded-full bg-step-route/25 blur-[120px]"
-        style={{ animationDelay: "-7s" }}
-      />
-      <div
-        className="absolute -bottom-[30%] left-[25%] size-[40rem] animate-drift rounded-full bg-step-docs/25 blur-[120px]"
-        style={{ animationDelay: "-14s" }}
-      />
-      <div
-        className="absolute inset-0 opacity-[0.35] dark:opacity-20"
-        style={{
-          backgroundImage: "radial-gradient(var(--muted-foreground) 1px, transparent 1px)",
-          backgroundSize: "28px 28px",
-          maskImage: "radial-gradient(ellipse 70% 60% at 50% 45%, black 20%, transparent 75%)",
-        }}
-      />
-    </div>
-  )
-}
-
 function Hero() {
   const ref = useRef<HTMLElement>(null)
 
@@ -92,7 +69,7 @@ function Hero() {
 
   return (
     <section ref={ref} onPointerMove={onMove} className="relative isolate flex min-h-dvh flex-col">
-      <HeroBackground />
+      <BrandBackground />
 
       <header className="mx-auto flex w-full max-w-[96rem] items-center justify-between px-6 py-5 sm:px-10">
         <Link to="/" className="flex items-center gap-2.5">
