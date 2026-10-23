@@ -1304,3 +1304,180 @@ input, textarea { font-family: inherit; }
     grid-template-columns: repeat(3, 1fr);
   }
 }
+
+/* ============================================================================
+   Streaming, agent steps & message actions
+   ============================================================================ */
+.agent-steps {
+  margin: 0 0 12px;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+.agent-steps > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+  padding: 3px 0;
+  color: var(--text-faint);
+  font-weight: 500;
+  user-select: none;
+}
+.agent-steps > summary::-webkit-details-marker { display: none; }
+.agent-steps > summary:hover { color: var(--text-muted); }
+.agent-steps > summary .chevron { transition: transform 0.15s; }
+.agent-steps[open] > summary .chevron { transform: rotate(90deg); }
+
+.step-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 4px 0 4px 14px;
+  border-left: 2px solid var(--border-strong);
+}
+.step { margin: 2px 0; }
+.step-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 6px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-muted);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+.step-head.expandable { cursor: pointer; }
+.step-head.expandable:hover { background: var(--bg-elevated); }
+.step-label { flex: 1; min-width: 0; }
+.step-time {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.step-icon { display: inline-flex; flex-shrink: 0; }
+.step-icon.ok { color: var(--accent); }
+.step-icon.err { color: var(--danger); }
+.step-error .step-label { color: var(--danger); }
+.step-spinner {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: step-spin 0.7s linear infinite;
+}
+@keyframes step-spin { to { transform: rotate(360deg); } }
+.step-detail {
+  margin: 4px 0 8px 27px;
+  padding: 10px 12px;
+  max-height: 260px;
+  overflow: auto;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.step-meta { margin: 10px 0 0 14px; }
+
+.stream-caret {
+  display: inline-block;
+  width: 8px;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--accent);
+  border-radius: 1px;
+  animation: caret-blink 1s steps(2, start) infinite;
+}
+@keyframes caret-blink { to { visibility: hidden; } }
+
+.stopped-note {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.msg-user-row {
+  align-self: flex-end;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  max-width: 78%;
+}
+.msg-user-row .msg-user { max-width: 100%; margin-bottom: 2px; }
+.msg-actions {
+  display: flex;
+  gap: 2px;
+  margin-top: 4px;
+}
+.msg-user-row .msg-actions { opacity: 0; transition: opacity 0.15s; }
+.msg-user-row:hover .msg-actions,
+.msg-user-row:focus-within .msg-actions { opacity: 1; }
+.msg-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.msg-action:hover { background: var(--bg-elevated); color: var(--text); }
+
+.edit-box {
+  align-self: stretch;
+  margin: 18px 0 6px;
+  padding: 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--accent);
+  border-radius: 16px;
+}
+.edit-box textarea {
+  width: 100%;
+  resize: vertical;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font: inherit;
+  line-height: 1.6;
+}
+.edit-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+.ghost-btn {
+  height: 42px;
+  padding: 0 16px;
+  background: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.ghost-btn:hover { color: var(--text); background: var(--bg-elevated-hover); }
+
+.send-btn.is-stop { background: var(--text); color: var(--bg); }
+
+@media (max-width: 860px) {
+  .msg-user-row { max-width: 88%; }
+  .msg-user-row .msg-actions { opacity: 1; }
+}
