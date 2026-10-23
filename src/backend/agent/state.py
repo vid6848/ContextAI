@@ -24,3 +24,8 @@ class AgentState(TypedDict, total=False):
     document_chunks: list[dict[str, Any]]
     rag_sources: list[dict[str, Any]]
     messages: Annotated[Sequence[dict], operator.add]
+    # Timed agent steps (memory recall, routing, tool calls) shown in the UI and stored with the answer
+    steps: Annotated[list[dict[str, Any]], operator.add]
+    stopped: bool
+    user_message_id: int
+    assistant_message_id: int

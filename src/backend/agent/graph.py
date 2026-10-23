@@ -1,7 +1,13 @@
 """LangGraph agent orchestration graph for ContextAI with Tool Routing and Document RAG."""
 
+import json
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
+from langchain_core.runnables import RunnableConfig
+from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 
 from src.backend.agent.state import AgentState
@@ -131,6 +137,45 @@ def is_user_specific_memory(message: str) -> bool:
     return any(indicator in clean_msg for indicator in memory_indicators)
 
 
+TOOL_DISPLAY = {
+    "calculator": ("Calculating", "Calculator"),
+    "weather": ("Checking the weather", "OpenWeather"),
+    "crypto": ("Fetching crypto prices", "CoinGecko"),
+    "web_search": ("Searching the web", "Tavily web search"),
+}
+MAX_STEP_DETAIL_CHARS = 4000
+
+
+def _compact(value: Any) -> Any:
+    """Keep step details small enough to stream and store alongside the message."""
+    text = json.dumps(value, default=str)
+    if len(text) <= MAX_STEP_DETAIL_CHARS:
+        return value
+    return text[:MAX_STEP_DETAIL_CHARS] + "…"
+
+
+@contextmanager
+def agent_step(step_id: str, label: str) -> Iterator[dict[str, Any]]:
+    """Time a unit of agent work and stream its start/end as `step` events.
+
+    The body may update step["label"] and step["detail"]. Under graph.invoke() the stream writer is a
+    no-op, so the same nodes serve both the streaming and non-streaming endpoints.
+    """
+    writer = get_stream_writer()
+    step: dict[str, Any] = {"id": step_id, "label": label, "status": "running"}
+    writer({"type": "step", **step})
+    started = time.perf_counter()
+    try:
+        yield step
+        step["status"] = "done"
+    except Exception:
+        step["status"] = "error"
+        raise
+    finally:
+        step["duration_ms"] = round((time.perf_counter() - started) * 1000)
+        writer({"type": "step", **step})
+
+
 def _extract_message(state: AgentState) -> str:
     """Helper to extract user message string from state."""
     message = state.get("message", "")
@@ -182,22 +227,31 @@ def build_agent_graph(
         active_sql = sql_manager or get_default_sql_manager()
         active_vs = vector_store or get_default_vector_store()
 
-        recent_history = active_sql.get_recent_messages(
-            user_id=user_id,
-            limit=6,
-            conversation_id=state.get("conversation_id"),
-        )
+        with agent_step("memory", "Recalling memory") as step:
+            recent_history = active_sql.get_recent_messages(
+                user_id=user_id,
+                limit=6,
+                conversation_id=state.get("conversation_id"),
+            )
 
-        semantic_memories: list[str] = []
-        if message:
-            try:
-                semantic_memories = active_vs.get_relevant_memories(
-                    query=message,
-                    user_id=user_id,
-                    limit=3,
-                )
-            except Exception:
-                semantic_memories = []
+            semantic_memories: list[str] = []
+            if message:
+                try:
+                    semantic_memories = active_vs.get_relevant_memories(
+                        query=message,
+                        user_id=user_id,
+                        limit=3,
+                    )
+                except Exception:
+                    semantic_memories = []
+
+            step["label"] = (
+                f"Recalled {len(semantic_memories)} long-term "
+                f"{'memory' if len(semantic_memories) == 1 else 'memories'}"
+                if semantic_memories
+                else "No relevant long-term memories"
+            )
+            step["detail"] = {"memories": semantic_memories, "recent_messages": len(recent_history)}
 
         context_data = {
             "conversation_history": recent_history,
@@ -209,17 +263,22 @@ def build_agent_graph(
             "conversation_history": recent_history,
             "semantic_memories": semantic_memories,
             "context": context_data,
+            "steps": [step],
         }
 
     def classify_intent_node(state: AgentState) -> dict:
         """Classify user intent using TF-IDF + Logistic Regression."""
         message = _extract_message(state)
         active_classifier = classifier or get_default_classifier()
-        pred = active_classifier.predict(message)
+        with agent_step("intent", "Classifying intent") as step:
+            pred = active_classifier.predict(message)
+            step["label"] = f"Classified intent: {pred.intent} ({pred.confidence:.0%})"
+            step["detail"] = {"intent": pred.intent, "confidence": round(pred.confidence, 3)}
         return {
             "intent": pred.intent,
             "current_intent": pred.intent,
             "confidence": pred.confidence,
+            "steps": [step],
         }
 
     def route_by_intent(state: AgentState) -> str:
@@ -238,55 +297,62 @@ def build_agent_graph(
         else:
             return "generate_response"
 
+    def run_tool(name: str, tool: Any, msg: str) -> dict:
+        """Run a tool inside a timed step that records its input and output."""
+        running_label, display = TOOL_DISPLAY[name]
+        with agent_step(f"tool:{name}", running_label) as step:
+            res = tool.run(msg)
+            ok = bool(res.get("success", True))
+            step["label"] = f"Used {display}" if ok else f"{display} failed: {res.get('error', 'unknown error')}"
+            step["detail"] = {"input": msg, "output": _compact(res)}
+        return {"tool_name": name, "tool_result": res, "steps": [step]}
+
     def calculator_node(state: AgentState) -> dict:
         """Execute calculator tool."""
-        msg = _extract_message(state)
-        tool = calculator_tool or get_default_calculator_tool()
-        res = tool.run(msg)
-        return {"tool_name": "calculator", "tool_result": res}
+        return run_tool("calculator", calculator_tool or get_default_calculator_tool(), _extract_message(state))
 
     def weather_node(state: AgentState) -> dict:
         """Execute weather tool."""
-        msg = _extract_message(state)
-        tool = weather_tool or get_default_weather_tool()
-        res = tool.run(msg)
-        return {"tool_name": "weather", "tool_result": res}
+        return run_tool("weather", weather_tool or get_default_weather_tool(), _extract_message(state))
 
     def crypto_node(state: AgentState) -> dict:
         """Execute crypto tool."""
-        msg = _extract_message(state)
-        tool = crypto_tool or get_default_crypto_tool()
-        res = tool.run(msg)
-        return {"tool_name": "crypto", "tool_result": res}
+        return run_tool("crypto", crypto_tool or get_default_crypto_tool(), _extract_message(state))
 
     def web_search_node(state: AgentState) -> dict:
         """Execute web search tool."""
-        msg = _extract_message(state)
-        tool = tavily_tool or get_default_tavily_tool()
-        res = tool.run(msg)
-        return {"tool_name": "web_search", "tool_result": res}
+        return run_tool("web_search", tavily_tool or get_default_tavily_tool(), _extract_message(state))
 
     def document_rag_node(state: AgentState) -> dict:
         """Retrieve relevant PDF document chunks from ChromaDB."""
         msg = _extract_message(state)
         pipeline = rag_pipeline or get_default_rag_pipeline()
-        chunks = pipeline.retrieve(msg, limit=4, user_id=state.get("user_id") or "default_user")
+        with agent_step("tool:document_rag", "Searching your documents") as step:
+            chunks = pipeline.retrieve(msg, limit=4, user_id=state.get("user_id") or "default_user")
+            _, sources = pipeline.format_context(chunks)
+            step["label"] = (
+                f"Found {len(chunks)} relevant {'passage' if len(chunks) == 1 else 'passages'}"
+                if chunks
+                else "No matching documents found"
+            )
+            step["detail"] = {"input": msg, "sources": sources}
         if not chunks:
             return {
                 "tool_name": "document_rag",
                 "tool_result": {"success": False, "message": "No indexed documents found."},
                 "document_chunks": [],
                 "rag_sources": [],
+                "steps": [step],
             }
-        _, sources = pipeline.format_context(chunks)
         return {
             "tool_name": "document_rag",
             "tool_result": {"success": True, "sources": sources},
             "document_chunks": chunks,
             "rag_sources": sources,
+            "steps": [step],
         }
 
-    def generate_response_node(state: AgentState) -> dict:
+    def generate_response_node(state: AgentState, config: RunnableConfig) -> dict:
         """Generate response with the configured LLM incorporating tools, RAG, and memory context."""
         message = _extract_message(state)
         intent = state.get("intent") or state.get("current_intent") or "GENERAL"
@@ -299,6 +365,7 @@ def build_agent_graph(
                     "No documents have been indexed yet. "
                     "Please ingest a PDF document first so I can answer questions from it."
                 )
+                get_stream_writer()({"type": "token", "text": no_doc_msg})
                 return {
                     "response": no_doc_msg,
                     "final_response": no_doc_msg,
@@ -350,10 +417,26 @@ def build_agent_graph(
         if combined_context:
             call_kwargs["context"] = combined_context
 
-        response_text = active_llm.generate_response(**call_kwargs)
+        configurable = config.get("configurable", {}) if config else {}
+        if not configurable.get("stream"):
+            response_text = active_llm.generate_response(**call_kwargs)
+            return {
+                "response": response_text,
+                "final_response": response_text,
+            }
+
+        # Streaming: forward each delta to the client as it arrives; stop early if cancelled
+        cancel_event = configurable.get("cancel_event")
+        writer = get_stream_writer()
+        parts: list[str] = []
+        for delta in active_llm.stream_response(cancel_event=cancel_event, **call_kwargs):
+            parts.append(delta)
+            writer({"type": "token", "text": delta})
+        response_text = "".join(parts)
         return {
             "response": response_text,
             "final_response": response_text,
+            "stopped": bool(cancel_event and cancel_event.is_set()),
         }
 
     def save_memory_node(state: AgentState) -> dict:
@@ -366,12 +449,13 @@ def build_agent_graph(
         active_vs = vector_store or get_default_vector_store()
 
         conversation_id = state.get("conversation_id")
+        saved: dict[str, int] = {}
         if message:
-            active_sql.save_message(
+            saved["user_message_id"] = active_sql.save_message(
                 user_id=user_id, role="user", message=message, conversation_id=conversation_id
             )
         if response:
-            active_sql.save_message(
+            saved["assistant_message_id"] = active_sql.save_message(
                 user_id=user_id,
                 role="assistant",
                 message=response,
@@ -381,13 +465,15 @@ def build_agent_graph(
                     "confidence": state.get("confidence"),
                     "tool_used": state.get("tool_name"),
                     "sources": state.get("rag_sources"),
+                    "steps": state.get("steps") or [],
+                    "stopped": bool(state.get("stopped")),
                 },
             )
 
         if message and is_user_specific_memory(message):
             active_vs.add_memory(memory=message, user_id=user_id)
 
-        return {}
+        return saved
 
     # Register nodes
     workflow.add_node("retrieve_memory", retrieve_memory_node)
