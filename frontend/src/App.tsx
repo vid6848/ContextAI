@@ -1,6 +1,6 @@
 import { Menu, PanelLeftOpen, SquarePen } from "lucide-react"
-import { useEffect, useState } from "react"
-import { Outlet, useNavigate } from "react-router"
+import { useEffect, useRef, useState } from "react"
+import { Outlet, useLocation, useNavigate } from "react-router"
 
 import { AppSidebar, type Panel } from "@/components/AppSidebar"
 import { Panels } from "@/components/Panels"
@@ -28,6 +28,22 @@ export function AppLayout() {
     void loadConversations()
   }, [loadConversations])
 
+  // First visit with no chats: show the landing page once
+  const location = useLocation()
+  const conversationsLoaded = useChat((s) => s.conversationsLoaded)
+  const hasChats = useChat((s) => s.conversations.length > 0)
+  useEffect(() => {
+    if (!conversationsLoaded || hasChats || location.pathname !== "/") return
+    let welcomed = true
+    try {
+      welcomed = localStorage.getItem("contextai_welcomed") === "1"
+    } catch {
+      /* storage unavailable: skip the landing page */
+    }
+    if (!welcomed) navigate("/welcome", { replace: true })
+  }, [conversationsLoaded, hasChats, location.pathname, navigate])
+
+
   const setCollapsedPersist = (value: boolean) => {
     setCollapsed(value)
     try {
@@ -37,6 +53,29 @@ export function AppLayout() {
     }
   }
 
+  // Global shortcuts: ⌘/Ctrl+K search, ⌘/Ctrl+Shift+O new chat, ⌘/Ctrl+/ shortcut list
+  const searchRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return
+      const key = e.key.toLowerCase()
+      if (key === "k") {
+        e.preventDefault()
+        if (window.matchMedia("(max-width: 767px)").matches) setMobileOpen(true)
+        else setCollapsedPersist(false)
+        setTimeout(() => searchRef.current?.focus(), 50)
+      } else if (key === "o" && e.shiftKey) {
+        e.preventDefault()
+        navigate("/")
+      } else if (key === "/") {
+        e.preventDefault()
+        setPanel("shortcuts")
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  })
+
   const openPanel = (p: Panel) => {
     setMobileOpen(false)
     setPanel(p)
@@ -44,16 +83,22 @@ export function AppLayout() {
 
   return (
     <div className="flex h-dvh overflow-hidden">
+      <a
+        href="#composer"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:text-primary-foreground"
+      >
+        Skip to message box
+      </a>
       {!collapsed && (
         <aside className="hidden w-[260px] shrink-0 border-r border-sidebar-border md:block">
-          <AppSidebar onCollapse={() => setCollapsedPersist(true)} onOpenPanel={openPanel} />
+          <AppSidebar onCollapse={() => setCollapsedPersist(true)} onOpenPanel={openPanel} searchRef={searchRef} />
         </aside>
       )}
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="w-[280px] p-0" showCloseButton={false}>
           <SheetTitle className="sr-only">Chats</SheetTitle>
-          <AppSidebar onNavigate={() => setMobileOpen(false)} onOpenPanel={openPanel} />
+          <AppSidebar onNavigate={() => setMobileOpen(false)} onOpenPanel={openPanel} searchRef={searchRef} />
         </SheetContent>
       </Sheet>
 

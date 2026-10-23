@@ -5,8 +5,10 @@ import { toast } from "sonner"
 
 import { Composer, type ComposerHandle } from "@/components/Composer"
 import { EmptyState } from "@/components/EmptyState"
+import { ConnectionBanner } from "@/components/ConnectionBanner"
 import { AssistantMessage, UserMessage } from "@/components/MessageItem"
 import { SourcesPanel } from "@/components/Sources"
+import { useConnection } from "@/hooks/useConnection"
 import { useStickToBottom } from "@/hooks/useStickToBottom"
 import { useActiveMessages, useChat } from "@/store/chat"
 
@@ -19,6 +21,7 @@ export function ChatPage() {
   const send = useChat((s) => s.send)
   const stop = useChat((s) => s.stop)
   const composer = useRef<ComposerHandle>(null)
+  const connection = useConnection()
   const { ref: scrollRef, scrollToBottom } = useStickToBottom<HTMLDivElement>(messages)
 
   useEffect(() => {
@@ -32,6 +35,12 @@ export function ChatPage() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && useChat.getState().streaming) stop()
+      // "/" jumps to the message box unless the user is already typing somewhere
+      const typing = e.target instanceof HTMLElement && e.target.closest("input, textarea, [contenteditable]")
+      if (e.key === "/" && !typing && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault()
+        composer.current?.focus()
+      }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
@@ -94,6 +103,7 @@ export function ChatPage() {
         )}
       </div>
       <div className="mx-auto w-full max-w-[720px] px-4 pb-3">
+        <ConnectionBanner state={connection} />
         <Composer ref={composer} streaming={streaming} onSend={onSend} onStop={stop} />
         <p className="mt-2 text-center text-xs text-muted-foreground">
           ContextAI can make mistakes. Check important information.
