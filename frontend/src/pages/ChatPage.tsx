@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react"
+import { FileText } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router"
 import { toast } from "sonner"
 
@@ -35,16 +36,50 @@ export function ChatPage() {
     return () => window.removeEventListener("keydown", onKey)
   }, [stop])
 
-  const onSend = (text: string) => {
+  const onSend = (text: string, attachments: string[] = []) => {
     scrollToBottom()
-    void send(text, { onCreated: (newId) => navigate(`/c/${newId}`, { replace: true }) })
+    void send(text, { attachments, onCreated: (newId) => navigate(`/c/${newId}`, { replace: true }) })
   }
 
+  // Drop PDFs anywhere on the chat to attach them. dragDepth tracks nested enter/leave events.
+  const [dragging, setDragging] = useState(false)
+  const dragDepth = useRef(0)
+  const hasFiles = (e: React.DragEvent) => e.dataTransfer.types.includes("Files")
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div
+      className="relative flex min-h-0 flex-1 flex-col"
+      onDragEnter={(e) => {
+        if (!hasFiles(e)) return
+        e.preventDefault()
+        dragDepth.current += 1
+        setDragging(true)
+      }}
+      onDragOver={(e) => hasFiles(e) && e.preventDefault()}
+      onDragLeave={() => {
+        dragDepth.current = Math.max(0, dragDepth.current - 1)
+        if (dragDepth.current === 0) setDragging(false)
+      }}
+      onDrop={(e) => {
+        if (!hasFiles(e)) return
+        e.preventDefault()
+        dragDepth.current = 0
+        setDragging(false)
+        composer.current?.addFiles(e.dataTransfer.files)
+      }}
+    >
+      {dragging && (
+        <div className="pointer-events-none absolute inset-3 z-20 flex flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-step-docs/60 bg-background/90 backdrop-blur-sm">
+          <span className="flex size-12 items-center justify-center rounded-2xl bg-step-docs/10 text-step-docs">
+            <FileText className="size-6" />
+          </span>
+          <p className="text-[15px] font-medium">Drop PDFs to attach them</p>
+          <p className="text-sm text-muted-foreground">Up to 10 MB each. Only you can see them.</p>
+        </div>
+      )}
       <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         {messages.length === 0 ? (
-          <EmptyState onPick={onSend} />
+          <EmptyState onPick={(text) => onSend(text)} />
         ) : (
           <div className="mx-auto w-full max-w-[720px] space-y-8 px-4 pt-6 pb-10">
             {messages.map((m, i) =>

@@ -74,13 +74,26 @@ class DocumentRAGPipeline:
             metadata={"description": "ContextAI PDF document RAG knowledgebase"},
         )
 
-    def count(self, user_id: str | None = None) -> int:
-        """Return number of indexed chunks, optionally only those owned by user_id."""
+    @staticmethod
+    def _where(user_id: str | None, document_names: list[str] | None = None) -> dict[str, Any] | None:
+        """Chroma metadata filter for a user's chunks, optionally limited to specific documents."""
+        clauses: list[dict[str, Any]] = []
+        if user_id:
+            clauses.append({"user_id": user_id})
+        if document_names:
+            clauses.append({"document_name": {"$in": list(document_names)}})
+        if not clauses:
+            return None
+        return clauses[0] if len(clauses) == 1 else {"$and": clauses}
+
+    def count(self, user_id: str | None = None, document_names: list[str] | None = None) -> int:
+        """Return number of indexed chunks, optionally only those owned by user_id (and named documents)."""
         if self.collection is None:
             self.initialize()
-        if user_id is None:
+        where = self._where(user_id, document_names)
+        if where is None:
             return self.collection.count()
-        return len(self.collection.get(where={"user_id": user_id}, include=[])["ids"])
+        return len(self.collection.get(where=where, include=[])["ids"])
 
     def ingest_pdf(
         self,
@@ -158,19 +171,25 @@ class DocumentRAGPipeline:
                 "error": "Failed to read this PDF. It may be corrupted, encrypted, or image-only.",
             }
 
-    def retrieve(self, query: str, limit: int = 4, user_id: str | None = None) -> list[dict[str, Any]]:
-        """Perform semantic search over indexed chunks, restricted to user_id's documents when given."""
+    def retrieve(
+        self,
+        query: str,
+        limit: int = 4,
+        user_id: str | None = None,
+        document_names: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Semantic search over indexed chunks, restricted to user_id's documents (and named ones) when given."""
         if self.collection is None:
             self.initialize()
 
-        total = self.count(user_id)
+        total = self.count(user_id, document_names)
         if total == 0:
             return []
 
         results = self.collection.query(
             query_texts=[query],
             n_results=min(limit, total),
-            where={"user_id": user_id} if user_id else None,
+            where=self._where(user_id, document_names),
         )
 
         chunks: list[dict[str, Any]] = []
