@@ -182,7 +182,11 @@ def build_agent_graph(
         active_sql = sql_manager or get_default_sql_manager()
         active_vs = vector_store or get_default_vector_store()
 
-        recent_history = active_sql.get_recent_messages(user_id=user_id, limit=6)
+        recent_history = active_sql.get_recent_messages(
+            user_id=user_id,
+            limit=6,
+            conversation_id=state.get("conversation_id"),
+        )
 
         semantic_memories: list[str] = []
         if message:
@@ -283,7 +287,7 @@ def build_agent_graph(
         }
 
     def generate_response_node(state: AgentState) -> dict:
-        """Generate response via Claude through LiteLLM incorporating tools, RAG, and memory context."""
+        """Generate response with the configured LLM incorporating tools, RAG, and memory context."""
         message = _extract_message(state)
         intent = state.get("intent") or state.get("current_intent") or "GENERAL"
 
@@ -361,10 +365,24 @@ def build_agent_graph(
         active_sql = sql_manager or get_default_sql_manager()
         active_vs = vector_store or get_default_vector_store()
 
+        conversation_id = state.get("conversation_id")
         if message:
-            active_sql.save_message(user_id=user_id, role="user", message=message)
+            active_sql.save_message(
+                user_id=user_id, role="user", message=message, conversation_id=conversation_id
+            )
         if response:
-            active_sql.save_message(user_id=user_id, role="assistant", message=response)
+            active_sql.save_message(
+                user_id=user_id,
+                role="assistant",
+                message=response,
+                conversation_id=conversation_id,
+                metadata={
+                    "intent": state.get("intent"),
+                    "confidence": state.get("confidence"),
+                    "tool_used": state.get("tool_name"),
+                    "sources": state.get("rag_sources"),
+                },
+            )
 
         if message and is_user_specific_memory(message):
             active_vs.add_memory(memory=message, user_id=user_id)
