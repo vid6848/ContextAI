@@ -1,4 +1,4 @@
-import { Check, Copy, Pencil, RotateCcw } from "lucide-react"
+import { Check, Copy, Pencil, RotateCcw, ThumbsDown, ThumbsUp } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 
@@ -11,11 +11,28 @@ import type { ChatMessage } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { useChat } from "@/store/chat"
 
-function ActionButton({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
+function ActionButton({
+  label,
+  onClick,
+  pressed,
+  children,
+}: {
+  label: string
+  onClick: () => void
+  pressed?: boolean
+  children: React.ReactNode
+}) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="ghost" size="icon" className="size-8 text-muted-foreground" onClick={onClick} aria-label={label}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn("size-8 text-muted-foreground", pressed && "text-foreground")}
+          onClick={onClick}
+          aria-label={label}
+          aria-pressed={pressed}
+        >
           {children}
         </Button>
       </TooltipTrigger>
@@ -109,6 +126,12 @@ export function UserMessage({ message }: { message: ChatMessage }) {
 export function AssistantMessage({ message, isLast }: { message: ChatMessage; isLast: boolean }) {
   const busy = useChat((s) => !!s.streaming)
   const regenerate = useChat((s) => s.regenerate)
+  const setFeedback = useChat((s) => s.setFeedback)
+  const feedback = message.meta?.feedback
+  const rate = (rating: "up" | "down") =>
+    setFeedback(message.key, feedback === rating ? null : rating)
+      .then(() => feedback !== rating && toast("Thanks for the feedback"))
+      .catch(() => toast.error("Couldn't save your feedback."))
   const waiting = message.streaming && !message.content
 
   return (
@@ -127,6 +150,16 @@ export function AssistantMessage({ message, isLast }: { message: ChatMessage; is
       {!message.streaming && (
         <div className={cn("mt-1.5 -ml-2 flex", !isLast && "opacity-0 transition-opacity group-hover:opacity-100 max-md:opacity-100")}>
           {message.content && <CopyButton text={message.content} />}
+          {message.id != null && message.content && !message.error && (
+            <>
+              <ActionButton label="Good response" pressed={feedback === "up"} onClick={() => rate("up")}>
+                <ThumbsUp className={cn("size-4", feedback === "up" && "fill-current")} />
+              </ActionButton>
+              <ActionButton label="Bad response" pressed={feedback === "down"} onClick={() => rate("down")}>
+                <ThumbsDown className={cn("size-4", feedback === "down" && "fill-current")} />
+              </ActionButton>
+            </>
+          )}
           {isLast && !busy && (
             <ActionButton label={message.error ? "Retry" : "Regenerate"} onClick={() => regenerate(message.key)}>
               <RotateCcw className="size-4" />
