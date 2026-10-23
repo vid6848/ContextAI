@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react"
 import { Outlet, useNavigate } from "react-router"
 
 import { AppSidebar, type Panel } from "@/components/AppSidebar"
+import { BrandBackground } from "@/components/BrandBackground"
 import { Panels } from "@/components/Panels"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
@@ -68,7 +69,8 @@ export function AppLayout() {
   }
 
   return (
-    <div className="flex h-dvh overflow-hidden">
+    <div className="relative isolate flex h-dvh overflow-hidden">
+      <BrandBackground soft />
       <a
         href="#composer"
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:text-primary-foreground"
@@ -76,7 +78,7 @@ export function AppLayout() {
         Skip to message box
       </a>
       {!collapsed && (
-        <aside className="hidden w-[17rem] shrink-0 border-r border-sidebar-border md:block">
+        <aside className="hidden w-[17rem] shrink-0 border-r border-sidebar-border/70 md:block">
           <AppSidebar onCollapse={() => setCollapsedPersist(true)} onOpenPanel={openPanel} searchRef={searchRef} />
         </aside>
       )}
@@ -89,7 +91,7 @@ export function AppLayout() {
       </Sheet>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-12 shrink-0 items-center gap-1 px-2">
+        <header className="flex h-14 shrink-0 items-center gap-1 px-3">
           <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobileOpen(true)} aria-label="Open sidebar">
             <Menu className="size-[1.125rem]" />
           </Button>

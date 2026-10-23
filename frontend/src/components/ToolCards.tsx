@@ -20,7 +20,7 @@ const round = (n?: number | null) => (typeof n === "number" ? Math.round(n) : "�
 export function WeatherCard({ data }: { data: WeatherOutput }) {
   const unit = data.units === "fahrenheit" ? "°F" : "°C"
   return (
-    <figure className="mb-4 flex items-center gap-5 rounded-2xl border bg-card px-5 py-4" aria-label={`Weather in ${data.location}`}>
+    <figure className="mb-4 flex items-center gap-5 rounded-2xl border bg-card/85 px-5 py-4 shadow-[0_18px_40px_-26px_rgb(30_20_90/0.4)] backdrop-blur-xl" aria-label={`Weather in ${data.location}`}>
       <WeatherIcon condition={data.condition} className="size-11 shrink-0 text-step-tool" />
       <div className="min-w-0 flex-1">
         <figcaption className="truncate text-sm text-muted-foreground">{data.location}</figcaption>
@@ -71,7 +71,7 @@ export function CryptoCard({ data }: { data: CryptoOutput }) {
   const up = (change ?? 0) >= 0
   const name = data.coin.replace(/-/g, " ")
   return (
-    <figure className="mb-4 flex flex-wrap items-end gap-x-6 gap-y-2 rounded-2xl border bg-card px-5 py-4" aria-label={`${name} price`}>
+    <figure className="mb-4 flex flex-wrap items-end gap-x-6 gap-y-2 rounded-2xl border bg-card/85 px-5 py-4 shadow-[0_18px_40px_-26px_rgb(30_20_90/0.4)] backdrop-blur-xl" aria-label={`${name} price`}>
       <div>
         <figcaption className="text-sm capitalize text-muted-foreground">{name}</figcaption>
         <p className="text-[1.875rem] leading-tight font-medium tabular-nums tracking-tight">{usd.format(data.price_usd)}</p>

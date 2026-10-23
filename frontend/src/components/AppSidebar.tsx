@@ -58,7 +58,7 @@ export function AppSidebar({ onNavigate, onCollapse, onOpenPanel, searchRef }: A
   }, [conversations, query])
 
   return (
-    <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
+    <div className="flex h-full flex-col bg-sidebar/75 text-sidebar-foreground backdrop-blur-xl">
       <div className="flex items-center justify-between px-3 pt-3 pb-2">
         <NavLink to="/" onClick={onNavigate} title="ContextAI home" className="flex items-center gap-2 rounded-md px-1.5 py-1">
           <Logo className="size-[1.375rem]" />

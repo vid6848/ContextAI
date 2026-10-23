@@ -108,7 +108,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         if (streaming) onStop()
         else submit()
       }}
-      className="rounded-3xl border bg-card p-2 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_4px_16px_-6px_rgb(0_0_0/0.08)] focus-within:border-ring/60"
+      className="rounded-[1.75rem] border bg-card/85 p-2 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_18px_40px_-20px_rgb(40_25_120/0.35)] backdrop-blur-xl transition-[border-color,box-shadow] focus-within:border-brand/50 focus-within:shadow-[0_0_0_4px_color-mix(in_oklab,var(--brand)_14%,transparent),0_18px_40px_-20px_rgb(40_25_120/0.4)]"
     >
       {attachments.length > 0 && (
         <ul className="flex flex-wrap gap-2 px-1 pt-1 pb-2" aria-label="Attached files">
