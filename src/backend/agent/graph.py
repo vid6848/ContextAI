@@ -14,6 +14,7 @@ from langgraph.graph import END, START, StateGraph
 from src.backend.agent.state import AgentState
 from src.backend.agent.toolbox import TOOL_LABELS, TOOL_SPECS, ToolBox
 from src.backend.classifier.intent_classifier import IntentClassifier
+from src.backend.classifier.router import HybridRouter
 from src.backend.core.config import settings
 from src.backend.llm.client import LLMClient
 from src.backend.memory.sql_db import SQLiteManager
@@ -46,6 +47,17 @@ def get_default_classifier() -> IntentClassifier:
         _default_classifier = IntentClassifier()
         _default_classifier.train()
     return _default_classifier
+
+
+_default_router: HybridRouter | None = None
+
+
+def get_default_router() -> HybridRouter:
+    """Hybrid router built on the default classifier plus sentence embeddings."""
+    global _default_router
+    if _default_router is None:
+        _default_router = HybridRouter(get_default_classifier())
+    return _default_router
 
 
 def get_default_llm_client() -> LLMClient:
@@ -239,7 +251,7 @@ def tool_card(state: AgentState) -> dict[str, Any] | None:
 
 
 def choose_route(confidence: float) -> str:
-    """Hybrid routing: trust the cheap classifier only when it's confident, else let the LLM pick tools."""
+    """Route for the non-hybrid modes ("hybrid" uses HybridRouter.decide instead)."""
     if settings.router_mode == "classifier":
         return "classifier"
     if settings.router_mode == "llm":
@@ -373,16 +385,26 @@ def build_agent_graph(
         }
 
     def classify_intent_node(state: AgentState) -> dict:
-        """Classify user intent using TF-IDF + Logistic Regression."""
+        """Classify intent and decide the route: fixed single-tool fast path, or the LLM tool agent."""
         message = _extract_message(state)
         active_classifier = classifier or get_default_classifier()
         attachments = state.get("attachments") or []
         with agent_step("intent", "Classifying intent") as step:
             if attachments:
                 # The user pointed at specific files; no need to guess
-                intent, confidence = "DOCUMENT", 1.0
+                intent, confidence, route = "DOCUMENT", 1.0, "classifier"
                 step["label"] = f"Routed to your attached {'file' if len(attachments) == 1 else 'files'}"
                 step["detail"] = {"intent": intent, "attachments": attachments}
+            elif settings.router_mode == "hybrid":
+                decision = get_default_router().decide(message, settings.hybrid_confidence_threshold)
+                intent, confidence, route = decision.intent, decision.confidence, decision.route
+                step["detail"] = {"intent": intent, "similarity": round(confidence, 3), "route": route,
+                                  "reason": decision.reason}
+                step["label"] = (
+                    f"Classified intent: {intent} ({confidence:.0%} match)"
+                    if route == "classifier"
+                    else f"Letting the model choose tools ({decision.reason})"
+                )
             else:
                 pred = active_classifier.predict(message)
                 intent, confidence = pred.intent, pred.confidence
@@ -393,18 +415,11 @@ def build_agent_graph(
                     if route == "classifier"
                     else f"Letting the model choose tools (classifier guessed {intent}, {confidence:.0%})"
                 )
-                return {
-                    "intent": intent,
-                    "current_intent": intent,
-                    "confidence": confidence,
-                    "route": route,
-                    "steps": [step],
-                }
         return {
             "intent": intent,
             "current_intent": intent,
             "confidence": confidence,
-            "route": "classifier",
+            "route": route,
             "steps": [step],
         }
 

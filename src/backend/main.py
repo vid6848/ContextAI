@@ -1,3 +1,5 @@
+import threading
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -9,7 +11,23 @@ from src.backend.api.routes import router
 # Built React app (npm run build in frontend/). Docker copies it to the same relative location.
 FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
+def _warm_up() -> None:
+    """Build the router (embeds the intent examples) before the first chat needs it."""
+    from src.backend.agent.graph import get_default_router
+    from src.backend.core.config import settings
+
+    if settings.router_mode == "hybrid":
+        get_default_router()
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    threading.Thread(target=_warm_up, name="warm-up", daemon=True).start()
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="ContextAI API",
     description="Backend API service for ContextAI personal assistant",
     version="0.2.0",

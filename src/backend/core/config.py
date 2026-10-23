@@ -26,7 +26,8 @@ class Settings(BaseSettings):
     # Tool routing: "hybrid" uses the TF-IDF classifier when it's confident and lets the LLM choose
     # (and chain) tools otherwise; "llm" always uses function calling; "classifier" never does.
     router_mode: Literal["hybrid", "llm", "classifier"] = "hybrid"
-    hybrid_confidence_threshold: float = 0.8
+    # Minimum MiniLM similarity for the fast path (both classifiers must also agree); see evals/route_eval.py
+    hybrid_confidence_threshold: float = 0.35
     max_tool_rounds: int = 4
 
     # Long-term memory: "llm" extracts and reconciles facts after each reply; "heuristic" stores
