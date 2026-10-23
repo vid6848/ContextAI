@@ -243,6 +243,29 @@ class SQLiteManager:
             messages.append(item)
         return messages
 
+    def get_message(self, message_id: int, conversation_id: str, user_id: str) -> dict[str, Any] | None:
+        """Return one message of a conversation, or None if it doesn't belong to it."""
+        with self.get_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT id, role, message, timestamp
+                FROM conversation_history
+                WHERE id = ? AND conversation_id = ? AND user_id = ?
+                """,
+                (message_id, conversation_id, user_id),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def delete_messages_from(self, message_id: int, conversation_id: str, user_id: str) -> int:
+        """Delete a message and everything after it in a conversation (used by edit and regenerate)."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "DELETE FROM conversation_history WHERE conversation_id = ? AND user_id = ? AND id >= ?",
+                (conversation_id, user_id, message_id),
+            )
+            conn.commit()
+            return cursor.rowcount
+
     def clear_history(self, user_id: str | None = None) -> None:
         """Clear conversations and history for a specific user, or all users if None."""
         with self.get_connection() as conn:

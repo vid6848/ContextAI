@@ -2,7 +2,9 @@
 
 import logging
 import random
+import threading
 import time
+from collections.abc import Iterator
 from typing import Any
 
 import litellm
@@ -161,14 +163,7 @@ class LLMClient:
             raise last_error
         return ""
 
-    def generate_response(
-        self,
-        message: str | list[dict[str, str]],
-        intent: str = "GENERAL",
-        context: Any = None,
-        **kwargs: Any,
-    ) -> str:
-        """Call Gemini via LiteLLM with transient retry logic and fallback model support."""
+    def _require_api_key(self) -> None:
         if not self.api_key:
             logger.error("GEMINI_API_KEY is not configured.")
             raise ValueError(
@@ -176,8 +171,15 @@ class LLMClient:
                 "Please set GEMINI_API_KEY in your .env file."
             )
 
+    @staticmethod
+    def build_messages(
+        message: str | list[dict[str, str]],
+        intent: str = "GENERAL",
+        context: Any = None,
+    ) -> list[dict[str, str]]:
+        """Build the chat message list (system prompt + user message) sent to the model."""
         if isinstance(message, list):
-            messages = message
+            return message
         else:
             system_prompt = (
                 "You are the reasoning and response layer of ContextAI, "
@@ -196,10 +198,21 @@ class LLMClient:
                     "and do not invent memories."
                 )
 
-            messages = [
+            return [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": str(message)},
             ]
+
+    def generate_response(
+        self,
+        message: str | list[dict[str, str]],
+        intent: str = "GENERAL",
+        context: Any = None,
+        **kwargs: Any,
+    ) -> str:
+        """Call the model via LiteLLM with transient retry logic and fallback model support."""
+        self._require_api_key()
+        messages = self.build_messages(message, intent, context)
 
         # 1. Attempt primary model with retries
         try:
@@ -241,3 +254,57 @@ class LLMClient:
             raise LLMServiceUnavailableError(
                 "Gemini is temporarily unavailable. Please try again in a moment."
             ) from primary_exc
+
+    def stream_response(
+        self,
+        message: str | list[dict[str, str]],
+        intent: str = "GENERAL",
+        context: Any = None,
+        cancel_event: threading.Event | None = None,
+        **kwargs: Any,
+    ) -> Iterator[str]:
+        """Yield response text deltas as the model produces them.
+
+        Transient failures are retried (then the fallback model is tried) only before the first token,
+        so a caller never sees a partially streamed answer restart. Setting cancel_event stops the
+        stream early; whatever was produced so far has already been yielded.
+        """
+        self._require_api_key()
+        messages = self.build_messages(message, intent, context)
+
+        models = [self.model_name]
+        if self.fallback_model_name and self.fallback_model_name != self.model_name:
+            models.append(self.fallback_model_name)
+
+        last_error: Exception | None = None
+        for model in models:
+            for attempt in range(self.max_retries + 1):
+                started = False
+                try:
+                    stream = litellm.completion(
+                        model=model, messages=messages, api_key=self.api_key, stream=True, **kwargs
+                    )
+                    for chunk in stream:
+                        if cancel_event is not None and cancel_event.is_set():
+                            return
+                        delta = chunk.choices[0].delta.content if chunk.choices else None
+                        if delta:
+                            started = True
+                            yield delta
+                    return
+                except Exception as exc:
+                    if started or not is_transient_error(exc):
+                        raise
+                    last_error = exc
+                    if attempt < self.max_retries:
+                        delay = (self.base_delay * (2 ** attempt)) + random.uniform(0.05, 0.25)
+                        logger.warning(
+                            "Transient error streaming %s (attempt %d/%d): %s. Retrying in %.2fs...",
+                            model, attempt + 1, self.max_retries + 1, type(exc).__name__, delay,
+                        )
+                        time.sleep(delay)
+            logger.warning("Model %s unavailable for streaming: %s", model, type(last_error).__name__)
+
+        raise LLMServiceUnavailableError(
+            "The AI model is temporarily unavailable. Please try again in a moment."
+        ) from last_error
