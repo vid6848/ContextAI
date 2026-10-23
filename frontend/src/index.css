@@ -58,6 +58,8 @@
 
 :root {
   --radius: 0.625rem;
+  /* Reading column: grows with the window instead of a fixed narrow strip */
+  --content-width: clamp(42rem, 68vw, 70rem);
 
   --background: #fafafb;
   --foreground: #161a23;
@@ -137,6 +139,13 @@
   html {
     @apply font-sans antialiased;
     text-rendering: optimizeLegibility;
+    /* Every size is in rem, so this one value scales all text and spacing: 17px, 18px on large screens */
+    font-size: 106.25%;
+  }
+  @media (min-width: 1600px) {
+    html {
+      font-size: 112.5%;
+    }
   }
   body {
     @apply bg-background text-foreground;
@@ -164,7 +173,7 @@
 
 /* Assistant message typography */
 .md {
-  font-size: 16px;
+  font-size: 1rem;
   line-height: 1.7;
   overflow-wrap: anywhere;
 }
@@ -197,7 +206,7 @@
 }
 .md pre {
   font-family: var(--font-mono);
-  font-size: 13.5px;
+  font-size: 0.85rem;
   line-height: 1.6;
   padding: 14px 16px;
   overflow-x: auto;
