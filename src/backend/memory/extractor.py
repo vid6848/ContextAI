@@ -39,44 +39,101 @@ def worth_checking(message: str) -> bool:
 
 
 def _parse_operations(raw: str) -> list[dict[str, Any]]:
-    text = raw.strip()
-    fenced = re.search(r"\{.*\}", text, re.DOTALL)
-    if not fenced:
-        return []
-    try:
-        data = json.loads(fenced.group(0))
-    except json.JSONDecodeError:
-        return []
-    ops = data.get("operations") if isinstance(data, dict) else None
+    ops = _parse_json(raw).get("operations")
     return ops if isinstance(ops, list) else []
+
+
+TITLE_PROMPT = (
+    "Write a short title (2 to 6 words) for a chat that starts with the exchange below. "
+    "Use sentence case, no quotes, no trailing punctuation. Reply with the title only."
+)
+TITLE_ADDENDUM = (
+    '\n\nAlso include "title": a 2-6 word sentence-case title (no quotes or trailing punctuation) for a chat '
+    'that starts with this message, e.g. {"title": "Weekend trip ideas", "operations": []}.'
+)
+
+
+def needs_llm_title(message: str) -> bool:
+    """Short first messages ("What's the weather in Tokyo?") already make a good title."""
+    return len(message.split()) > 6
+
+
+def clean_title(raw: str | None) -> str | None:
+    lines = (raw or "").strip().splitlines()
+    title = lines[0].strip().strip("\"'*#").rstrip(".").strip() if lines else ""
+    return title[:60] if len(title) >= 2 else None
+
+
+def _parse_json(raw: str) -> dict[str, Any]:
+    found = re.search(r"\{.*\}", raw.strip(), re.DOTALL)
+    if not found:
+        return {}
+    try:
+        data = json.loads(found.group(0))
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def post_turn(
+    llm: LLMClient,
+    store: ChromaMemoryStore,
+    user_id: str,
+    message: str,
+    answer: str = "",
+    *,
+    want_title: bool = False,
+    want_memory: bool = True,
+) -> dict[str, Any]:
+    """After a reply: update long-term memory and/or title a new chat, in at most ONE model call.
+
+    Returns {"changes": [{"op", "id", "fact"}], "title": str | None}. Failures are logged and swallowed:
+    neither must ever break a chat turn.
+    """
+    want_memory = want_memory and worth_checking(message)
+    if not (want_memory or want_title):
+        return {"changes": [], "title": None}
+    related: list[dict[str, Any]] = []
+    try:
+        if want_memory:
+            related = store.search_memories(message, user_id=user_id, limit=6)
+            existing = "\n".join(f"- [{m['id']}] {m['memory']}" for m in related) or "(none)"
+            prompt = [
+                {"role": "system", "content": EXTRACTION_PROMPT + (TITLE_ADDENDUM if want_title else "")},
+                {"role": "user", "content": f"Existing memories:\n{existing}\n\nUser's latest message:\n{message}"},
+            ]
+        else:
+            prompt = [
+                {"role": "system", "content": TITLE_PROMPT},
+                {"role": "user", "content": f"User: {message[:1000]}\n\nAssistant: {answer[:1000]}"},
+            ]
+        raw = llm.generate_response(message=prompt)
+    except Exception:
+        logger.warning("Post-turn update failed", exc_info=True)
+        return {"changes": [], "title": None}
+
+    if not want_memory:
+        return {"changes": [], "title": clean_title(raw)}
+    data = _parse_json(raw)
+    title = clean_title(str(data.get("title") or "")) if want_title else None
+    ops = data.get("operations") if isinstance(data.get("operations"), list) else []
+    return {"changes": _apply(store, user_id, ops, related), "title": title}
 
 
 def update_long_term_memory(
     llm: LLMClient, store: ChromaMemoryStore, user_id: str, message: str
 ) -> list[dict[str, Any]]:
-    """Extract facts from the user's message and apply add/update/delete operations.
+    """Extract facts from the user's message and apply add/update/delete operations (memory only)."""
+    return post_turn(llm, store, user_id, message, want_memory=True)["changes"]
 
-    Returns the applied changes as [{"op", "id", "fact"}], for the UI's "Memory updated" note.
-    Failures are logged and swallowed: memory must never break a chat turn.
-    """
-    if not worth_checking(message):
-        return []
-    try:
-        related = store.search_memories(message, user_id=user_id, limit=6)
-        existing = "\n".join(f"- [{m['id']}] {m['memory']}" for m in related) or "(none)"
-        raw = llm.generate_response(
-            message=[
-                {"role": "system", "content": EXTRACTION_PROMPT},
-                {"role": "user", "content": f"Existing memories:\n{existing}\n\nUser's latest message:\n{message}"},
-            ]
-        )
-    except Exception:
-        logger.warning("Memory extraction failed", exc_info=True)
-        return []
 
+def _apply(
+    store: ChromaMemoryStore, user_id: str, ops: list[Any], related: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Apply the model's operations, only touching memories it was shown (so only the user's own)."""
     known = {m["id"]: m["memory"] for m in related}
     applied: list[dict[str, Any]] = []
-    for op in _parse_operations(raw)[:5]:
+    for op in ops[:5]:
         if not isinstance(op, dict):
             continue
         kind, fact, mid = op.get("op"), str(op.get("fact") or "").strip()[:300], op.get("id")

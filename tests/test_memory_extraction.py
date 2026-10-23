@@ -134,3 +134,37 @@ def test_memories_api_crud_and_ownership():
     assert client.delete("/api/v1/memories", params={"user_id": "m2"}).status_code == 200
     assert client.get("/api/v1/memories", params={"user_id": "m2"}).json()["memories"] == []
     assert client.post("/api/v1/memories", params={"user_id": "m2"}, json={"fact": ""}).status_code == 422
+
+
+def test_new_chat_title_and_memory_share_one_utility_call(monkeypatch):
+    """Cost: a new chat about the user needs 1 side call (title + memory), not 2."""
+    monkeypatch.setattr(settings, "memory_mode", "llm")
+    combined = json.dumps({"title": "Moving to Berlin", "operations": [{"op": "add", "fact": "Lives in Berlin"}]})
+    with patch("src.backend.llm.client.LLMClient.stream_response", return_value=iter(["Congrats!"])), \
+         patch("src.backend.llm.client.LLMClient.generate_response", return_value=combined) as side:
+        payload = {"message": "I just moved to Berlin with my partner last week", "user_id": "m3"}
+        with client.stream("POST", "/api/v1/chat/stream", json=payload) as r:
+            body = "".join(r.iter_text())
+
+    assert side.call_count == 1
+    system = side.call_args.kwargs["message"][0]["content"]
+    assert system.startswith("You maintain the long-term memory") and '"title"' in system
+    assert '"title": "Moving to Berlin"' in body and "Lives in Berlin" in body
+
+
+def test_short_impersonal_first_message_needs_no_side_call(monkeypatch):
+    monkeypatch.setattr(settings, "memory_mode", "llm")
+    with patch("src.backend.llm.client.LLMClient.stream_response", return_value=iter(["18°C"])), \
+         patch("src.backend.llm.client.LLMClient.generate_response") as side:
+        with client.stream("POST", "/api/v1/chat/stream", json={"message": "Weather in Tokyo?", "user_id": "m4"}) as r:
+            "".join(r.iter_text())
+    side.assert_not_called()
+
+
+def test_side_tasks_use_a_separate_utility_model(monkeypatch):
+    from src.backend.agent.graph import get_default_utility_llm
+
+    monkeypatch.setattr(settings, "utility_model_name", "")
+    llm = get_default_utility_llm()
+    assert llm.model_name.endswith(settings.fallback_model_name)
+    assert llm.fallback_model_name.endswith(settings.model_name)

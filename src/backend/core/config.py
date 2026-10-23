@@ -12,6 +12,9 @@ class Settings(BaseSettings):
 
     model_name: str = "gemini-3.5-flash-lite"
     fallback_model_name: str = "gemini-3.1-flash-lite"
+    # Side tasks (chat titles, memory extraction) run on this model so they don't spend the chat
+    # model's per-minute quota; empty means use the fallback model
+    utility_model_name: str = ""
     gemini_api_key: str = ""
 
     sqlite_db_path: str = "./data/contextai.db"

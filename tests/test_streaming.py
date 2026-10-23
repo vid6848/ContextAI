@@ -232,7 +232,7 @@ def test_new_chat_gets_llm_title_after_first_answer(mock_stream, mock_generate):
     mock_stream.return_value = iter(["Paris is lovely in spring."])
     mock_generate.return_value = '"Planning a spring trip to Paris."\n'
 
-    events = _stream({"message": "When should I visit Paris?", "user_id": "t1"})
+    events = _stream({"message": "When is the best time of year to visit Paris?", "user_id": "t1"})
     assert events[-1] == ("title", {"title": "Planning a spring trip to Paris"})
 
     cid = events[0][1]["conversation_id"]
@@ -249,10 +249,11 @@ def test_new_chat_gets_llm_title_after_first_answer(mock_stream, mock_generate):
 @patch("src.backend.llm.client.LLMClient.stream_response")
 def test_title_failure_keeps_provisional_title(mock_stream, _mock_generate):
     mock_stream.return_value = iter(["ok"])
-    events = _stream({"message": "Hello there friend", "user_id": "t2"})
+    message = "Hello there friend, can you help me plan something?"
+    events = _stream({"message": message, "user_id": "t2"})
     assert events[-1][0] == "done"
     listed = client.get("/api/v1/conversations", params={"user_id": "t2"}).json()["conversations"]
-    assert listed[0]["title"] == "Hello there friend"
+    assert listed[0]["title"] == "Hello there friend, can you help me plan something?"
 
 
 @patch("src.backend.tools.crypto.CryptoTool.run")
