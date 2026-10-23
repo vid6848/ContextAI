@@ -180,6 +180,15 @@ class ChromaMemoryStore:
         self.collection.delete(ids=[memory_id])
         return True
 
+    def reassign_user(self, old_user_id: str, new_user_id: str) -> int:
+        if self.collection is None:
+            self.initialize()
+        rows = self.collection.get(where={"user_id": old_user_id}, include=["metadatas"])
+        if rows["ids"]:
+            metas = [{**(m or {}), "user_id": new_user_id} for m in rows["metadatas"]]
+            self.collection.update(ids=rows["ids"], metadatas=metas)
+        return len(rows["ids"])
+
     def delete_user_memories(self, user_id: str) -> None:
         """Delete all memories associated with a specific user."""
         if self.collection is None:

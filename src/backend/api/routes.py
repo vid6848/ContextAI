@@ -21,6 +21,7 @@ from src.backend.agent.graph import (
     get_default_vector_store,
     tool_card,
 )
+from src.backend.auth import ACCOUNT_PREFIX, USER_ID_PATTERN, bearer_account, current_user_id, resolve_user
 from src.backend.core.config import settings
 from src.backend.core.rate_limit import rate_limit
 from src.backend.llm.client import LLMServiceUnavailableError
@@ -34,8 +35,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Anonymous browser ids are UUIDs; this also keeps ids safe to use in storage keys and filters.
-USER_ID_PATTERN = r"^[A-Za-z0-9_-]{1,64}$"
 UPLOAD_READ_CHUNK = 1024 * 1024
 
 chat_rate_limit = rate_limit("chat", lambda: settings.rate_limit_chat_per_minute)
@@ -185,21 +184,22 @@ def resolve_conversation(request: ChatRequest) -> dict[str, Any]:
 
 
 @router.get("/conversations")
-def list_conversations(user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
+def list_conversations(user_id: str = Depends(current_user_id)):
     """List a user's conversations, most recently active first."""
     return {"conversations": get_default_sql_manager().list_conversations(user_id)}
 
 
 @router.post("/conversations", status_code=201)
-def create_conversation(request: ConversationCreateRequest):
+def create_conversation(request: ConversationCreateRequest, account: str | None = Depends(bearer_account)):
     """Create an empty conversation."""
+    request.user_id = resolve_user(account, request.user_id)
     return get_default_sql_manager().create_conversation(user_id=request.user_id, title=request.title)
 
 
 @router.get("/conversations/{conversation_id}/messages")
 def get_conversation_messages(
     conversation_id: str,
-    user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN),
+    user_id: str = Depends(current_user_id),
 ):
     """Return the full message history of a conversation."""
     sql_mgr = get_default_sql_manager()
@@ -217,7 +217,7 @@ def set_message_feedback(
     conversation_id: str,
     message_id: int,
     request: FeedbackRequest,
-    user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN),
+    user_id: str = Depends(current_user_id),
 ):
     """Record 👍/👎 feedback on an assistant answer."""
     sql_mgr = get_default_sql_manager()
@@ -232,7 +232,7 @@ def set_message_feedback(
 def rename_conversation(
     conversation_id: str,
     request: ConversationRenameRequest,
-    user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN),
+    user_id: str = Depends(current_user_id),
 ):
     """Rename a conversation."""
     if not get_default_sql_manager().rename_conversation(conversation_id, user_id, request.title):
@@ -241,7 +241,7 @@ def rename_conversation(
 
 
 @router.delete("/conversations/{conversation_id}")
-def delete_conversation(conversation_id: str, user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
+def delete_conversation(conversation_id: str, user_id: str = Depends(current_user_id)):
     """Delete a conversation and all of its messages."""
     if not get_default_sql_manager().delete_conversation(conversation_id, user_id):
         raise HTTPException(status_code=404, detail="Conversation not found.")
@@ -283,8 +283,11 @@ def after_reply(request: ChatRequest, final: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.post("/chat", response_model=ChatResponse, dependencies=[Depends(chat_rate_limit)])
-def chat_endpoint(request: ChatRequest, background: BackgroundTasks):
+def chat_endpoint(
+    request: ChatRequest, background: BackgroundTasks, account: str | None = Depends(bearer_account)
+):
     """Endpoint for interacting with the ContextAI agent via LangGraph."""
+    request.user_id = resolve_user(account, request.user_id)
     conversation = resolve_conversation(request)
     agent = get_agent()
     try:
@@ -341,7 +344,7 @@ def _client_error_detail(err: Exception) -> str:
 
 
 @router.post("/chat/stream", dependencies=[Depends(chat_rate_limit)])
-async def chat_stream_endpoint(request: ChatRequest):
+async def chat_stream_endpoint(request: ChatRequest, account: str | None = Depends(bearer_account)):
     """Stream the agent's work as Server-Sent Events.
 
     Events: `meta` (conversation id) → `step` (memory/intent/tool progress) → `token` (response text
@@ -349,6 +352,7 @@ async def chat_stream_endpoint(request: ChatRequest):
     `title` event with an LLM-written title. If the client disconnects
     (Stop button), generation is cancelled and the partial answer is saved.
     """
+    request.user_id = resolve_user(account, request.user_id)
     conversation = resolve_conversation(request)
     agent = get_agent()
     loop = asyncio.get_running_loop()
@@ -416,8 +420,9 @@ async def chat_stream_endpoint(request: ChatRequest):
 # ============================================================================
 
 @router.post("/memory/clear")
-def clear_memory_endpoint(request: ClearMemoryRequest):
+def clear_memory_endpoint(request: ClearMemoryRequest, account: str | None = Depends(bearer_account)):
     """Clear conversations, history and long-term semantic memories for the specified user."""
+    request.user_id = resolve_user(account, request.user_id)
     get_default_sql_manager().clear_history(user_id=request.user_id)
     get_default_vector_store().delete_user_memories(user_id=request.user_id)
     return {"success": True, "message": "Your conversations and memories have been cleared."}
@@ -430,13 +435,13 @@ class MemoryRequest(BaseModel):
 
 
 @router.get("/memories")
-def list_memories(user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
+def list_memories(user_id: str = Depends(current_user_id)):
     """Everything ContextAI remembers about the user."""
     return {"memories": get_default_vector_store().list_memories(user_id)}
 
 
 @router.post("/memories", status_code=201)
-def add_memory(request: MemoryRequest, user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
+def add_memory(request: MemoryRequest, user_id: str = Depends(current_user_id)):
     """Teach ContextAI a fact directly."""
     memory_id = get_default_vector_store().add_memory(request.fact.strip(), user_id, {"source": "manual"})
     return {"id": memory_id, "fact": request.fact.strip()}
@@ -444,7 +449,7 @@ def add_memory(request: MemoryRequest, user_id: str = Query(default="default_use
 
 @router.patch("/memories/{memory_id}")
 def edit_memory(
-    memory_id: str, request: MemoryRequest, user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)
+    memory_id: str, request: MemoryRequest, user_id: str = Depends(current_user_id)
 ):
     """Correct a memory."""
     if not get_default_vector_store().update_memory(memory_id, user_id, request.fact.strip()):
@@ -453,7 +458,7 @@ def edit_memory(
 
 
 @router.delete("/memories/{memory_id}")
-def forget_memory(memory_id: str, user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
+def forget_memory(memory_id: str, user_id: str = Depends(current_user_id)):
     """Forget one memory."""
     if not get_default_vector_store().delete_memory(memory_id, user_id):
         raise HTTPException(status_code=404, detail="Memory not found.")
@@ -461,7 +466,7 @@ def forget_memory(memory_id: str, user_id: str = Query(default="default_user", p
 
 
 @router.delete("/memories")
-def forget_all_memories(user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
+def forget_all_memories(user_id: str = Depends(current_user_id)):
     """Forget everything about the user (chats are kept)."""
     get_default_vector_store().delete_user_memories(user_id)
     return {"success": True}
@@ -474,7 +479,7 @@ def forget_all_memories(user_id: str = Query(default="default_user", pattern=USE
 @router.post("/documents/upload", dependencies=[Depends(upload_rate_limit)])
 async def upload_document(
     file: UploadFile = File(...),
-    user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN),
+    user_id: str = Depends(current_user_id),
 ):
     """Upload and index a PDF into the user's private document collection."""
     if not file.filename or not file.filename.lower().endswith(".pdf"):
@@ -517,7 +522,7 @@ async def upload_document(
 
 
 @router.get("/documents")
-def get_documents_status(user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
+def get_documents_status(user_id: str = Depends(current_user_id)):
     """List the user's documents and the total number of indexed passages."""
     pipeline = get_default_rag_pipeline()
     return {
@@ -528,7 +533,7 @@ def get_documents_status(user_id: str = Query(default="default_user", pattern=US
 
 
 @router.delete("/documents/{document_id}")
-def delete_document(document_id: str, user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
+def delete_document(document_id: str, user_id: str = Depends(current_user_id)):
     """Delete one of the user's documents and all of its passages."""
     if not get_default_rag_pipeline().delete_document(user_id, document_id):
         raise HTTPException(status_code=404, detail="Document not found.")
@@ -540,8 +545,9 @@ def delete_document(document_id: str, user_id: str = Query(default="default_user
 # ============================================================================
 
 @router.post("/reminders")
-def create_reminder(request: ReminderCreateRequest):
+def create_reminder(request: ReminderCreateRequest, account: str | None = Depends(bearer_account)):
     """Create a new reminder for a user."""
+    request.user_id = resolve_user(account, request.user_id)
     mgr = get_reminder_manager()
     try:
         reminder = mgr.create_reminder(
@@ -557,13 +563,54 @@ def create_reminder(request: ReminderCreateRequest):
 
 @router.get("/reminders")
 def get_reminders(
-    user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN),
+    user_id: str = Depends(current_user_id),
     status: str | None = Query(default=None),
 ):
     """Retrieve all reminders for a user."""
     mgr = get_reminder_manager()
     reminders = mgr.get_reminders(user_id=user_id, status=status)
     return {"success": True, "reminders": reminders}
+
+
+# ============================================================================
+# Accounts
+# ============================================================================
+
+class ClaimRequest(BaseModel):
+    """The browser's guest id, whose data should move into the signed-in account."""
+
+    guest_id: str = Field(..., pattern=USER_ID_PATTERN)
+
+
+@router.get("/config")
+def public_config():
+    """What the web app needs to offer sign-in (all public values)."""
+    if not (settings.supabase_url and settings.supabase_publishable_key):
+        return {"auth": None}
+    return {
+        "auth": {
+            "supabase_url": settings.supabase_url,
+            "publishable_key": settings.supabase_publishable_key,
+            "required": settings.auth_required,
+        }
+    }
+
+
+@router.post("/auth/claim")
+def claim_guest_data(request: ClaimRequest, account: str | None = Depends(bearer_account)):
+    """After sign-in, move this browser's guest chats, memories, documents and reminders into the account."""
+    if account is None:
+        raise HTTPException(status_code=401, detail="Sign in first.")
+    if request.guest_id.startswith(ACCOUNT_PREFIX) or request.guest_id == account:
+        raise HTTPException(status_code=400, detail="That isn't a guest id.")
+    moved = {
+        "conversations": get_default_sql_manager().reassign_user(request.guest_id, account),
+        "memories": get_default_vector_store().reassign_user(request.guest_id, account),
+        "document_passages": get_default_rag_pipeline().reassign_user(request.guest_id, account),
+        "reminders": get_reminder_manager().reassign_user(request.guest_id, account),
+        "push_subscriptions": get_push_service().reassign_user(request.guest_id, account),
+    }
+    return {"success": True, "user_id": account, "moved": moved}
 
 
 _push_service: PushService | None = None
@@ -593,7 +640,7 @@ def push_public_key():
 
 @router.post("/push/subscribe", status_code=201)
 def push_subscribe(
-    request: PushSubscriptionRequest, user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)
+    request: PushSubscriptionRequest, user_id: str = Depends(current_user_id)
 ):
     """Register this browser to receive reminder notifications."""
     try:
@@ -621,13 +668,13 @@ def parse_reminder_time(
 
 
 @router.get("/reminders/due")
-def get_due_reminders(user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
+def get_due_reminders(user_id: str = Depends(current_user_id)):
     """Reminders that are due now and haven't been notified yet (polled by the web app)."""
     return {"reminders": get_reminder_manager().get_due(user_id)}
 
 
 @router.patch("/reminders/{reminder_id}/notified")
-def mark_reminder_notified(reminder_id: int, user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
+def mark_reminder_notified(reminder_id: int, user_id: str = Depends(current_user_id)):
     """Record that the user has been notified about a reminder."""
     if not get_reminder_manager().mark_notified(reminder_id, user_id):
         raise HTTPException(status_code=404, detail="Reminder not found.")
@@ -635,7 +682,7 @@ def mark_reminder_notified(reminder_id: int, user_id: str = Query(default="defau
 
 
 @router.patch("/reminders/{reminder_id}/complete")
-def complete_reminder(reminder_id: int, user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
+def complete_reminder(reminder_id: int, user_id: str = Depends(current_user_id)):
     """Mark a reminder as completed."""
     mgr = get_reminder_manager()
     updated = mgr.complete_reminder(reminder_id=reminder_id, user_id=user_id)
@@ -645,7 +692,7 @@ def complete_reminder(reminder_id: int, user_id: str = Query(default="default_us
 
 
 @router.delete("/reminders/{reminder_id}")
-def delete_reminder(reminder_id: int, user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
+def delete_reminder(reminder_id: int, user_id: str = Depends(current_user_id)):
     """Delete a reminder by ID."""
     mgr = get_reminder_manager()
     deleted = mgr.delete_reminder(reminder_id=reminder_id, user_id=user_id)

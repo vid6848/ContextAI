@@ -278,6 +278,13 @@ class SQLiteManager:
             )
             return cursor.rowcount
 
+    def reassign_user(self, old_user_id: str, new_user_id: str) -> int:
+        """Move a guest's conversations to their account. Returns how many conversations moved."""
+        with self.get_connection() as conn:
+            moved = conn.execute("UPDATE conversations SET user_id = ? WHERE user_id = ?", (new_user_id, old_user_id))
+            conn.execute("UPDATE conversation_history SET user_id = ? WHERE user_id = ?", (new_user_id, old_user_id))
+            return moved.rowcount
+
     def clear_history(self, user_id: str | None = None) -> None:
         """Clear conversations and history for a specific user, or all users if None."""
         with self.get_connection() as conn:

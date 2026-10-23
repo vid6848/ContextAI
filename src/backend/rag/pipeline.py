@@ -233,6 +233,16 @@ class DocumentRAGPipeline:
             doc["pages"] = max(doc["pages"], meta.get("total_pages") or meta.get("page_number") or 0)
         return sorted(docs.values(), key=lambda d: d.get("uploaded_at") or "", reverse=True)
 
+    def reassign_user(self, old_user_id: str, new_user_id: str) -> int:
+        """Move a guest's documents to their account. Returns how many passages moved."""
+        if self.collection is None:
+            self.initialize()
+        rows = self.collection.get(where={"user_id": old_user_id}, include=["metadatas"])
+        if rows["ids"]:
+            metas = [{**(m or {}), "user_id": new_user_id} for m in rows["metadatas"]]
+            self.collection.update(ids=rows["ids"], metadatas=metas)
+        return len(rows["ids"])
+
     def delete_document(self, user_id: str, document_id: str) -> int:
         """Delete one of the user's documents. Returns the number of passages removed (0 if not found)."""
         if self.collection is None:
