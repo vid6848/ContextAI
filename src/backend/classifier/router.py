@@ -55,9 +55,9 @@ class HybridRouter:
     def __init__(self, classifier: IntentClassifier, embed=None) -> None:
         self.classifier = classifier
         if embed is None:
-            from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
+            from src.backend.db.embeddings import get_embedder
 
-            embed = DefaultEmbeddingFunction()  # same MiniLM model the document search uses
+            embed = get_embedder()  # the same MiniLM instance the memory and document stores use
         self.embed = embed
         texts, labels = get_default_training_data()
         self.labels = np.array(labels)

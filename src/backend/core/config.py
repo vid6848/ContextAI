@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     utility_model_name: str = ""
     gemini_api_key: str = ""
 
+    # Postgres (e.g. Supabase) connection string. When set, chats, reminders, memories and documents live
+    # there (pgvector for embeddings); when empty, SQLite + ChromaDB under ./data are used.
+    database_url: str = ""
     sqlite_db_path: str = "./data/contextai.db"
     chroma_persist_dir: str = "./data/chroma"
 

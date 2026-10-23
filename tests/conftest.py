@@ -1,4 +1,10 @@
-"""Pytest configuration and test isolation fixtures."""
+"""Pytest configuration and test isolation fixtures.
+
+Set TEST_DATABASE_URL to a Postgres database with pgvector to run the whole suite against Postgres
+(as CI does); otherwise the stores use SQLite and ChromaDB in a temporary directory.
+"""
+
+import os
 
 import pytest
 
@@ -6,6 +12,7 @@ from src.backend.agent import graph
 from src.backend.api import routes
 from src.backend.core.config import settings
 from src.backend.core.rate_limit import limiter
+from src.backend.db import Database
 
 
 @pytest.fixture(autouse=True)
@@ -16,6 +23,14 @@ def isolate_test_storage(tmp_path, monkeypatch):
 
     monkeypatch.setattr(settings, "sqlite_db_path", test_db)
     monkeypatch.setattr(settings, "chroma_persist_dir", test_chroma)
+    pg_url = os.environ.get("TEST_DATABASE_URL", "")
+    monkeypatch.setattr(settings, "database_url", pg_url)
+    if pg_url:
+        with Database(pg_url).connect() as conn:
+            conn.execute(
+                "TRUNCATE conversations, conversation_history, reminders, push_subscriptions, memories, "
+                "document_chunks RESTART IDENTITY CASCADE"
+            )
     # Never call real LLM/tool APIs from tests, even if a developer's .env provides keys
     monkeypatch.setattr(settings, "gemini_api_key", "")
     monkeypatch.setattr(settings, "openweather_api_key", "")

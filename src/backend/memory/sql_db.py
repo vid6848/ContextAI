@@ -1,13 +1,12 @@
-"""SQLite conversation memory manager for ContextAI."""
+"""Conversations and message history, stored in SQLite locally or Postgres (Supabase) in production."""
 
 import json
-import os
-import sqlite3
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
 from src.backend.core.config import settings
+from src.backend.db import Database, decode_json
 
 DEFAULT_CONVERSATION_TITLE = "New conversation"
 
@@ -17,30 +16,26 @@ def _now() -> str:
 
 
 class SQLiteManager:
-    """Manages conversations and their message history stored in SQLite."""
+    """Manages conversations and their message history.
+
+    `db_path` is a SQLite file or a Postgres URL; by default DATABASE_URL when set, else the local file.
+    (The name predates Postgres support.)
+    """
 
     def __init__(self, db_path: str | None = None) -> None:
-        self.db_path = db_path if db_path is not None else settings.sqlite_db_path
-        self._ensure_dir()
+        self.db_path = db_path if db_path is not None else (settings.database_url or settings.sqlite_db_path)
+        self.db = Database(self.db_path)
         self.init_db()
 
-    def _ensure_dir(self) -> None:
-        """Ensure parent directory for database exists if db_path is a filesystem path."""
-        if self.db_path and self.db_path != ":memory:":
-            dirname = os.path.dirname(os.path.abspath(self.db_path))
-            if dirname:
-                os.makedirs(dirname, exist_ok=True)
-
-    def get_connection(self) -> sqlite3.Connection:
-        """Get an SQLite connection with row factory enabled."""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+    def get_connection(self):
+        """A connection in a transaction (committed when the `with` block exits)."""
+        return self.db.connect()
 
     def init_db(self) -> None:
-        """Initialize schema and migrate older databases that predate conversations."""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
+        """Create the SQLite schema and migrate older files. Postgres uses db/schema.sql instead."""
+        if self.db.kind != "sqlite":
+            return
+        with self.get_connection() as cursor:
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS conversations (
@@ -89,7 +84,6 @@ class SQLiteManager:
                 ON conversation_history(conversation_id, id);
                 """
             )
-            conn.commit()
 
     # ------------------------------------------------------------------ conversations
 
@@ -111,7 +105,6 @@ class SQLiteManager:
                 """,
                 conversation,
             )
-            conn.commit()
         return conversation
 
     def get_conversation(self, conversation_id: str, user_id: str) -> dict[str, Any] | None:
@@ -121,7 +114,7 @@ class SQLiteManager:
                 "SELECT id, user_id, title, created_at, updated_at FROM conversations WHERE id = ? AND user_id = ?",
                 (conversation_id, user_id),
             ).fetchone()
-        return dict(row) if row else None
+        return row
 
     def list_conversations(self, user_id: str) -> list[dict[str, Any]]:
         """List a user's conversations, most recently active first."""
@@ -135,7 +128,7 @@ class SQLiteManager:
                 """,
                 (user_id,),
             ).fetchall()
-        return [dict(row) for row in rows]
+        return rows
 
     def rename_conversation(self, conversation_id: str, user_id: str, title: str) -> bool:
         """Rename a conversation. Returns False if it does not exist for this user."""
@@ -147,7 +140,6 @@ class SQLiteManager:
                 "UPDATE conversations SET title = ? WHERE id = ? AND user_id = ?",
                 (clean, conversation_id, user_id),
             )
-            conn.commit()
             return cursor.rowcount > 0
 
     def delete_conversation(self, conversation_id: str, user_id: str) -> bool:
@@ -163,7 +155,6 @@ class SQLiteManager:
                 "DELETE FROM conversation_history WHERE conversation_id = ? AND user_id = ?",
                 (conversation_id, user_id),
             )
-            conn.commit()
             return True
 
     # ------------------------------------------------------------------ messages
@@ -185,20 +176,19 @@ class SQLiteManager:
             timestamp = _now()
 
         with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
+            cursor = conn.execute(
                 """
                 INSERT INTO conversation_history (user_id, role, message, timestamp, conversation_id, metadata)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (user_id, role, message, timestamp, conversation_id, json.dumps(metadata) if metadata else None),
+                returning_id=True,
             )
             if conversation_id:
-                cursor.execute(
+                conn.execute(
                     "UPDATE conversations SET updated_at = ? WHERE id = ? AND user_id = ?",
                     (timestamp, conversation_id, user_id),
                 )
-            conn.commit()
             return cursor.lastrowid
 
     def get_recent_messages(
@@ -222,7 +212,7 @@ class SQLiteManager:
         with self.get_connection() as conn:
             rows = conn.execute(query, params).fetchall()
             # Reverse so that oldest is first and newest is last (chronological)
-            return [dict(row) for row in reversed(rows)]
+            return list(reversed(rows))
 
     def get_conversation_messages(self, conversation_id: str, user_id: str) -> list[dict[str, Any]]:
         """Return every message in a conversation, oldest first, with decoded metadata."""
@@ -238,8 +228,8 @@ class SQLiteManager:
             ).fetchall()
         messages = []
         for row in rows:
-            item = dict(row)
-            item["metadata"] = json.loads(item["metadata"]) if item["metadata"] else None
+            item = row
+            item["metadata"] = decode_json(item["metadata"]) or None
             messages.append(item)
         return messages
 
@@ -254,7 +244,7 @@ class SQLiteManager:
                 """,
                 (message_id, conversation_id, user_id),
             ).fetchone()
-        return dict(row) if row else None
+        return row
 
     def update_message_metadata(
         self, message_id: int, conversation_id: str, user_id: str, changes: dict[str, Any]
@@ -267,7 +257,7 @@ class SQLiteManager:
             ).fetchone()
             if row is None:
                 return False
-            metadata = json.loads(row["metadata"]) if row["metadata"] else {}
+            metadata = decode_json(row["metadata"]) or {}
             for key, value in changes.items():
                 if value is None:
                     metadata.pop(key, None)
@@ -277,7 +267,6 @@ class SQLiteManager:
                 "UPDATE conversation_history SET metadata = ? WHERE id = ?",
                 (json.dumps(metadata) if metadata else None, message_id),
             )
-            conn.commit()
             return True
 
     def delete_messages_from(self, message_id: int, conversation_id: str, user_id: str) -> int:
@@ -287,17 +276,14 @@ class SQLiteManager:
                 "DELETE FROM conversation_history WHERE conversation_id = ? AND user_id = ? AND id >= ?",
                 (conversation_id, user_id, message_id),
             )
-            conn.commit()
             return cursor.rowcount
 
     def clear_history(self, user_id: str | None = None) -> None:
         """Clear conversations and history for a specific user, or all users if None."""
         with self.get_connection() as conn:
-            cursor = conn.cursor()
             if user_id is not None:
-                cursor.execute("DELETE FROM conversation_history WHERE user_id = ?", (user_id,))
-                cursor.execute("DELETE FROM conversations WHERE user_id = ?", (user_id,))
+                conn.execute("DELETE FROM conversation_history WHERE user_id = ?", (user_id,))
+                conn.execute("DELETE FROM conversations WHERE user_id = ?", (user_id,))
             else:
-                cursor.execute("DELETE FROM conversation_history")
-                cursor.execute("DELETE FROM conversations")
-            conn.commit()
+                conn.execute("DELETE FROM conversation_history")
+                conn.execute("DELETE FROM conversations")

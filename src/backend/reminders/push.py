@@ -4,7 +4,6 @@ import base64
 import json
 import logging
 import os
-import sqlite3
 import threading
 from datetime import UTC, datetime
 from typing import Any
@@ -14,6 +13,7 @@ from py_vapid import Vapid, Vapid01
 from pywebpush import WebPushException, webpush
 
 from src.backend.core.config import settings
+from src.backend.db import Database
 from src.backend.reminders.reminder_manager import ReminderManager
 
 logger = logging.getLogger(__name__)
@@ -62,10 +62,15 @@ class PushService:
     """Stores browser push subscriptions and delivers due reminders to them."""
 
     def __init__(self, db_path: str | None = None, reminders: ReminderManager | None = None) -> None:
-        self.db_path = db_path or settings.sqlite_db_path
+        self.db_path = db_path or settings.database_url or settings.sqlite_db_path
+        self.db = Database(self.db_path)
         self.reminders = reminders or ReminderManager(self.db_path)
-        self.keys = VapidKeys(os.path.dirname(os.path.abspath(self.db_path)))
+        # Generated keys live beside the local data; in production set VAPID_* so they survive redeploys
+        local_db = settings.sqlite_db_path if self.db.kind == "postgres" else self.db_path
+        self.keys = VapidKeys(os.path.dirname(os.path.abspath(local_db)))
         self.signer = _signer(self.keys)
+        if self.db.kind != "sqlite":
+            return  # Postgres: table comes from db/schema.sql
         with self._conn() as conn:
             conn.execute(
                 """
@@ -78,12 +83,9 @@ class PushService:
                 )
                 """
             )
-            conn.commit()
 
-    def _conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+    def _conn(self):
+        return self.db.connect()
 
     def subscribe(self, user_id: str, subscription: dict[str, Any]) -> None:
         keys = subscription.get("keys") or {}
@@ -99,17 +101,15 @@ class PushService:
                 """,
                 (subscription["endpoint"], user_id, keys["p256dh"], keys["auth"], datetime.now(UTC).isoformat()),
             )
-            conn.commit()
 
     def unsubscribe(self, endpoint: str) -> None:
         with self._conn() as conn:
             conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", (endpoint,))
-            conn.commit()
 
     def subscriptions(self, user_id: str) -> list[dict[str, Any]]:
         with self._conn() as conn:
             rows = conn.execute("SELECT * FROM push_subscriptions WHERE user_id = ?", (user_id,)).fetchall()
-        return [dict(r) for r in rows]
+        return rows
 
     def deliver_due(self, now: datetime | None = None) -> int:
         """Push every due, un-notified reminder to its owner's devices. Returns how many reminders were pushed.
