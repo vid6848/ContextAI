@@ -101,7 +101,7 @@ def test_stream_endpoint_emits_meta_steps_tokens_done(mock_stream):
     names = [name for name, _ in events]
 
     assert names[0] == "meta"
-    assert names[-1] == "done"
+    assert names[-1] in {"done", "title"}
     assert "step" in names and "token" in names
     assert names.index("step") < names.index("token")
 
@@ -113,7 +113,7 @@ def test_stream_endpoint_emits_meta_steps_tokens_done(mock_stream):
     finished = [s for s in steps if s["status"] == "done"]
     assert all(isinstance(s["duration_ms"], int) for s in finished)
 
-    done = events[-1][1]
+    done = next(data for name, data in events if name == "done")
     conversation_id = events[0][1]["conversation_id"]
     history = client.get(f"/api/v1/conversations/{conversation_id}/messages", params={"user_id": "s1"}).json()
     saved = history["messages"]
@@ -134,7 +134,7 @@ def test_stream_endpoint_reports_tool_step_with_input_and_output(mock_stream, mo
     assert [s["status"] for s in tool_steps] == ["running", "done"]
     assert tool_steps[-1]["label"] == "Used OpenWeather"
     assert tool_steps[-1]["detail"]["output"]["city"] == "Tokyo"
-    assert events[-1][1]["tool_used"] == "weather"
+    assert next(d for n, d in events if n == "done")["tool_used"] == "weather"
 
 
 @patch("src.backend.llm.client.LLMClient.stream_response")
@@ -224,3 +224,45 @@ def test_replace_rejects_unknown_or_assistant_messages(_mock):
 
     resp = client.post("/api/v1/chat", json={"message": "x", "user_id": "s6", "replace_from_message_id": 1})
     assert resp.status_code == 400
+
+
+@patch("src.backend.llm.client.LLMClient.generate_response")
+@patch("src.backend.llm.client.LLMClient.stream_response")
+def test_new_chat_gets_llm_title_after_first_answer(mock_stream, mock_generate):
+    mock_stream.return_value = iter(["Paris is lovely in spring."])
+    mock_generate.return_value = '"Planning a spring trip to Paris."\n'
+
+    events = _stream({"message": "When should I visit Paris?", "user_id": "t1"})
+    assert events[-1] == ("title", {"title": "Planning a spring trip to Paris"})
+
+    cid = events[0][1]["conversation_id"]
+    listed = client.get("/api/v1/conversations", params={"user_id": "t1"}).json()["conversations"]
+    assert listed[0]["id"] == cid and listed[0]["title"] == "Planning a spring trip to Paris"
+
+    # Follow-up turns in an existing chat don't retitle it
+    mock_stream.return_value = iter(["Sure."])
+    events = _stream({"message": "And Rome?", "user_id": "t1", "conversation_id": cid})
+    assert "title" not in [name for name, _ in events]
+
+
+@patch("src.backend.llm.client.LLMClient.generate_response", side_effect=RuntimeError("quota"))
+@patch("src.backend.llm.client.LLMClient.stream_response")
+def test_title_failure_keeps_provisional_title(mock_stream, _mock_generate):
+    mock_stream.return_value = iter(["ok"])
+    events = _stream({"message": "Hello there friend", "user_id": "t2"})
+    assert events[-1][0] == "done"
+    listed = client.get("/api/v1/conversations", params={"user_id": "t2"}).json()["conversations"]
+    assert listed[0]["title"] == "Hello there friend"
+
+
+@patch("src.backend.tools.crypto.CryptoTool.run")
+@patch("src.backend.llm.client.LLMClient.stream_response")
+def test_failed_tool_is_reported_as_error_step(mock_stream, mock_crypto):
+    mock_stream.return_value = iter(["Sorry, prices are unavailable."])
+    mock_crypto.return_value = {"success": False, "error": "Crypto price service is unreachable right now."}
+
+    events = _stream({"message": "What is the price of bitcoin?", "user_id": "s7"})
+    final = [d for n, d in events if n == "step" and d["id"] == "tool:crypto"][-1]
+    assert final["status"] == "error"
+    assert "unreachable" in final["label"]
+    assert "failed" not in final
