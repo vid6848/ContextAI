@@ -256,6 +256,30 @@ class SQLiteManager:
             ).fetchone()
         return dict(row) if row else None
 
+    def update_message_metadata(
+        self, message_id: int, conversation_id: str, user_id: str, changes: dict[str, Any]
+    ) -> bool:
+        """Merge keys into a message's metadata (a None value removes the key). False if not found."""
+        with self.get_connection() as conn:
+            row = conn.execute(
+                "SELECT metadata FROM conversation_history WHERE id = ? AND conversation_id = ? AND user_id = ?",
+                (message_id, conversation_id, user_id),
+            ).fetchone()
+            if row is None:
+                return False
+            metadata = json.loads(row["metadata"]) if row["metadata"] else {}
+            for key, value in changes.items():
+                if value is None:
+                    metadata.pop(key, None)
+                else:
+                    metadata[key] = value
+            conn.execute(
+                "UPDATE conversation_history SET metadata = ? WHERE id = ?",
+                (json.dumps(metadata) if metadata else None, message_id),
+            )
+            conn.commit()
+            return True
+
     def delete_messages_from(self, message_id: int, conversation_id: str, user_id: str) -> int:
         """Delete a message and everything after it in a conversation (used by edit and regenerate)."""
         with self.get_connection() as conn:

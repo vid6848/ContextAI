@@ -1,4 +1,14 @@
-# ContextAI production image: FastAPI serves both the API and the web UI.
+# ContextAI production image: FastAPI serves the API and the built React app.
+
+# ---- 1. Build the frontend -------------------------------------------------
+FROM node:22-slim AS web
+WORKDIR /web
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+# ---- 2. Python runtime -------------------------------------------------------
 FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -16,6 +26,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY --chown=app:app src/ ./src/
 COPY --chown=app:app start.sh .
+COPY --from=web --chown=app:app /web/dist ./frontend/dist
 RUN mkdir -p /app/data/chroma && chown -R app:app /app/data && chmod +x /app/start.sh
 
 USER app

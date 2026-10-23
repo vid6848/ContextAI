@@ -16,9 +16,14 @@ def isolate_test_storage(tmp_path, monkeypatch):
 
     monkeypatch.setattr(settings, "sqlite_db_path", test_db)
     monkeypatch.setattr(settings, "chroma_persist_dir", test_chroma)
+    # Never call real LLM/tool APIs from tests, even if a developer's .env provides keys
+    monkeypatch.setattr(settings, "gemini_api_key", "")
+    monkeypatch.setattr(settings, "openweather_api_key", "")
+    monkeypatch.setattr(settings, "tavily_api_key", "")
 
     # Reset singletons so they bind to the temporary test storage
     graph._default_sql_manager = None
+    graph._default_llm_client = None
     graph._default_vector_store = None
     graph._default_calculator_tool = None
     graph._default_weather_tool = None
@@ -33,6 +38,7 @@ def isolate_test_storage(tmp_path, monkeypatch):
 
     # Clean up singletons after test
     graph._default_sql_manager = None
+    graph._default_llm_client = None
     graph._default_vector_store = None
     graph._default_calculator_tool = None
     graph._default_weather_tool = None

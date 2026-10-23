@@ -1,0 +1,225 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-sans);
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Agent trace: the only colour in the UI, and it encodes the kind of step */
+  --color-step-memory: var(--step-memory);
+  --color-step-route: var(--step-route);
+  --color-step-tool: var(--step-tool);
+  --color-step-docs: var(--step-docs);
+  --color-step-error: var(--step-error);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+}
+
+:root {
+  --radius: 0.625rem;
+
+  --background: #fafafb;
+  --foreground: #161a23;
+  --card: #ffffff;
+  --card-foreground: #161a23;
+  --popover: #ffffff;
+  --popover-foreground: #161a23;
+  --primary: #161a23;
+  --primary-foreground: #fafafb;
+  --secondary: #f0f1f4;
+  --secondary-foreground: #161a23;
+  --muted: #f0f1f4;
+  --muted-foreground: #5b6271;
+  --accent: #eceef2;
+  --accent-foreground: #161a23;
+  --destructive: #c93636;
+  --border: #e4e6eb;
+  --input: #dadde3;
+  --ring: #8a93a6;
+
+  --sidebar: #f3f4f6;
+  --sidebar-foreground: #161a23;
+  --sidebar-primary: #161a23;
+  --sidebar-primary-foreground: #fafafb;
+  --sidebar-accent: #e7e9ed;
+  --sidebar-accent-foreground: #161a23;
+  --sidebar-border: #e4e6eb;
+  --sidebar-ring: #8a93a6;
+
+  --step-memory: #7c5cdb;
+  --step-route: #2f6feb;
+  --step-tool: #b86e12;
+  --step-docs: #138a72;
+  --step-error: #c93636;
+}
+
+.dark {
+  --background: #15171c;
+  --foreground: #eceef2;
+  --card: #1d2027;
+  --card-foreground: #eceef2;
+  --popover: #1d2027;
+  --popover-foreground: #eceef2;
+  --primary: #eceef2;
+  --primary-foreground: #15171c;
+  --secondary: #23262e;
+  --secondary-foreground: #eceef2;
+  --muted: #23262e;
+  --muted-foreground: #9aa1ae;
+  --accent: #262a33;
+  --accent-foreground: #eceef2;
+  --destructive: #f07070;
+  --border: #2a2e37;
+  --input: #333844;
+  --ring: #5b6271;
+
+  --sidebar: #101216;
+  --sidebar-foreground: #eceef2;
+  --sidebar-primary: #eceef2;
+  --sidebar-primary-foreground: #15171c;
+  --sidebar-accent: #1f222a;
+  --sidebar-accent-foreground: #eceef2;
+  --sidebar-border: #22252d;
+  --sidebar-ring: #5b6271;
+
+  --step-memory: #a08bf0;
+  --step-route: #6b9bff;
+  --step-tool: #e3a04a;
+  --step-docs: #3dbb9f;
+  --step-error: #f07070;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  /* Visible keyboard focus for custom controls (shadcn components set their own ring) */
+  :where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Assistant message typography */
+.md {
+  font-size: 16px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.md > * + * { margin-top: 0.85em; }
+.md h1, .md h2, .md h3, .md h4 { font-weight: 600; line-height: 1.3; margin-top: 1.4em; }
+.md h1 { font-size: 1.4em; }
+.md h2 { font-size: 1.22em; }
+.md h3 { font-size: 1.08em; }
+.md ul, .md ol { padding-left: 1.4em; }
+.md ul { list-style: disc; }
+.md ol { list-style: decimal; }
+.md li + li { margin-top: 0.3em; }
+.md li > ul, .md li > ol { margin-top: 0.3em; }
+.md a { color: var(--step-route); text-decoration: underline; text-underline-offset: 2px; }
+.md strong { font-weight: 600; }
+.md blockquote { border-left: 3px solid var(--border); padding-left: 1em; color: var(--muted-foreground); }
+.md hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+.md :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 0.12em 0.36em;
+  border-radius: 5px;
+  background: var(--muted);
+}
+.md .code-block {
+  border-radius: 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.md pre {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  line-height: 1.6;
+  padding: 14px 16px;
+  overflow-x: auto;
+}
+.md .table-wrap { overflow-x: auto; }
+.md table { width: 100%; border-collapse: collapse; font-size: 0.94em; }
+.md .katex-display { overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
+.md th, .md td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
+.md th { background: var(--muted); font-weight: 600; }
+
+/* Blinking caret at the end of the text while an answer streams in */
+.md.is-streaming > :last-child::after,
+.stream-caret {
+  content: "";
+  display: inline-block;
+  width: 0.5em;
+  height: 1.1em;
+  margin-left: 2px;
+  vertical-align: -0.2em;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0.7;
+  animation: caret 1s steps(2, start) infinite;
+}
+@keyframes caret { to { visibility: hidden; } }

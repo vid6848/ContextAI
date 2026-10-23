@@ -53,3 +53,7 @@ data/contextai.db
 .idea/
 .DS_Store
 Thumbs.db
+
+# Frontend build inputs that are rebuilt inside the image
+frontend/node_modules/
+frontend/dist/
