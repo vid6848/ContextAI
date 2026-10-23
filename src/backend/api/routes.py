@@ -3,8 +3,10 @@
 import os
 import tempfile
 from typing import Any
+
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
+
 from src.backend.agent.graph import (
     get_agent_app,
     get_default_rag_pipeline,
@@ -84,10 +86,10 @@ def chat_endpoint(request: ChatRequest):
         result = agent.invoke({"message": request.message, "user_id": request.user_id})
     except ValueError as err:
         # Configuration errors (e.g. missing API key) — return helpful message, not raw 500
-        raise HTTPException(status_code=503, detail=str(err))
+        raise HTTPException(status_code=503, detail=str(err)) from err
     except LLMServiceUnavailableError as err:
         # Transient LLM unavailability after bounded retries/fallback
-        raise HTTPException(status_code=503, detail=str(err))
+        raise HTTPException(status_code=503, detail=str(err)) from err
     except Exception as err:
         error_msg = str(err)
         # Check if the error or message indicates transient model unavailability
@@ -95,11 +97,11 @@ def chat_endpoint(request: ChatRequest):
             raise HTTPException(
                 status_code=503,
                 detail="Gemini is temporarily unavailable. Please try again in a moment.",
-            )
+            ) from err
         # Never expose raw API keys in error messages
         if "api_key" in error_msg.lower():
             error_msg = "LLM service configuration error. Check server logs for details."
-        raise HTTPException(status_code=502, detail=f"Agent execution error: {error_msg}")
+        raise HTTPException(status_code=502, detail=f"Agent execution error: {error_msg}") from err
 
     return ChatResponse(
         message=result.get("message", request.message),
@@ -184,7 +186,7 @@ def create_reminder(request: ReminderCreateRequest):
         )
         return {"success": True, "reminder": reminder}
     except ValueError as err:
-        raise HTTPException(status_code=400, detail=str(err))
+        raise HTTPException(status_code=400, detail=str(err)) from err
 
 
 @router.get("/reminders")

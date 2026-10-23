@@ -1,10 +1,11 @@
 """Tests for TF-IDF + Logistic Regression intent classifier."""
 
 import pytest
+
 from src.backend.classifier.intent_classifier import (
+    SUPPORTED_INTENTS,
     IntentClassifier,
     PredictionResult,
-    SUPPORTED_INTENTS,
     get_default_training_data,
 )
 

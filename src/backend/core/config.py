@@ -8,8 +8,6 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
 
-    backend_api_url: str = "http://localhost:8000"
-
     model_name: str = "gemini-3.5-flash-lite"
     fallback_model_name: str = "gemini-3.1-flash-lite"
     gemini_api_key: str = ""
@@ -25,6 +23,5 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore"
     )
-
 
 settings = Settings()

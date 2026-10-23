@@ -2,7 +2,9 @@
 
 import re
 from typing import Any
+
 import requests
+
 from src.backend.core.config import settings
 
 

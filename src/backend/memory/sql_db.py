@@ -2,8 +2,9 @@
 
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
+
 from src.backend.core.config import settings
 
 
@@ -63,7 +64,7 @@ class SQLiteManager:
         Returns the inserted row id.
         """
         if timestamp is None:
-            timestamp = datetime.now(timezone.utc).isoformat()
+            timestamp = datetime.now(UTC).isoformat()
 
         with self.get_connection() as conn:
             cursor = conn.cursor()

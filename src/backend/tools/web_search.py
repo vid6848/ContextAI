@@ -1,7 +1,9 @@
 """Web search tool integrating with Tavily API."""
 
 from typing import Any
+
 import requests
+
 from src.backend.core.config import settings
 
 

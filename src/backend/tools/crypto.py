@@ -2,6 +2,7 @@
 
 import re
 from typing import Any
+
 import requests
 
 # Common cryptocurrency symbol to CoinGecko ID mapping

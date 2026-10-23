@@ -1,7 +1,8 @@
 """State definition for ContextAI LangGraph agent."""
 
-from typing import TypedDict, Annotated, Sequence, Any
 import operator
+from collections.abc import Sequence
+from typing import Annotated, Any, TypedDict
 
 
 class AgentState(TypedDict, total=False):

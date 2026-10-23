@@ -1,0 +1,16 @@
+[project]
+name = "contextai"
+version = "0.2.0"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+# FastAPI dependency markers (File(...), Query(...)) are intentionally called in defaults
+ignore = ["B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

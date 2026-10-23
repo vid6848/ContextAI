@@ -1,9 +1,10 @@
 """Pytest configuration and test isolation fixtures."""
 
 import pytest
-from src.backend.core.config import settings
+
 from src.backend.agent import graph
 from src.backend.api import routes
+from src.backend.core.config import settings
 
 
 @pytest.fixture(autouse=True)
