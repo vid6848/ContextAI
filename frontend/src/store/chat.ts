@@ -24,6 +24,8 @@ interface SendOptions {
   replaceFromKey?: string
   /** Called once when a draft chat gets its server id, so the route can follow. */
   onCreated?: (conversationId: string) => void
+  /** Names of uploaded PDFs this message is about. */
+  attachments?: string[]
 }
 
 interface ChatState {
@@ -98,14 +100,22 @@ export const useChat = create<ChatState>((set, get) => {
         }
       }
 
-      const user: ChatMessage = { key: newKey(), role: "user", content: clean }
+      // Edit/regenerate keeps the attachments of the message being replaced
+      const replaced = opts.replaceFromKey ? get().messages[ck]?.find((m) => m.key === opts.replaceFromKey) : undefined
+      const attachments = opts.attachments ?? replaced?.meta?.attachments ?? []
+      const user: ChatMessage = {
+        key: newKey(),
+        role: "user",
+        content: clean,
+        meta: attachments.length ? { attachments } : undefined,
+      }
       const reply: ChatMessage = { key: newKey(), role: "assistant", content: "", streaming: true, meta: { steps: [] } }
       const controller = new AbortController()
       set((s) => ({ messages: { ...s.messages, [ck]: [...history, user, reply] }, streaming: { chatKey: ck, controller } }))
 
       try {
         const stream = streamChat(
-          { message: clean, conversation_id: get().activeId, replace_from_message_id: replaceFromId },
+          { message: clean, attachments, conversation_id: get().activeId, replace_from_message_id: replaceFromId },
           controller.signal,
         )
         for await (const { event, data } of stream) {

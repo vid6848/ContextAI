@@ -266,3 +266,41 @@ def test_failed_tool_is_reported_as_error_step(mock_stream, mock_crypto):
     assert final["status"] == "error"
     assert "unreachable" in final["label"]
     assert "failed" not in final
+
+
+@patch("src.backend.llm.client.LLMClient.stream_response")
+def test_attachments_route_to_and_scope_document_search(mock_stream):
+    import io
+
+    import pymupdf
+
+    def pdf(text):
+        doc = pymupdf.open()
+        doc.new_page().insert_text((50, 50), text)
+        data = doc.write()
+        doc.close()
+        return io.BytesIO(data)
+
+    for name, text in [("menu.pdf", "The cafe menu lists espresso and croissants."),
+                       ("lease.pdf", "The lease term is twelve months starting in March.")]:
+        files = {"file": (name, pdf(text), "application/pdf")}
+        assert client.post("/api/v1/documents/upload", params={"user_id": "att"}, files=files).status_code == 200
+
+    mock_stream.return_value = iter(["It covers the lease."])
+    # A vague request that the classifier alone wouldn't route to documents
+    events = _stream({"message": "what is this about?", "user_id": "att", "attachments": ["lease.pdf"]})
+
+    intent = [d for n, d in events if n == "step" and d["id"] == "intent"][-1]
+    assert intent["label"] == "Routed to your attached file"
+    done = next(d for n, d in events if n == "done")
+    assert done["intent"] == "DOCUMENT"
+    assert {s["document"] for s in done["sources"]} == {"lease.pdf"}
+
+    cid = events[0][1]["conversation_id"]
+    saved = client.get(f"/api/v1/conversations/{cid}/messages", params={"user_id": "att"}).json()["messages"]
+    assert saved[0]["metadata"] == {"attachments": ["lease.pdf"]}
+
+
+def test_attachment_list_is_validated():
+    resp = client.post("/api/v1/chat", json={"message": "hi", "attachments": [f"f{i}.pdf" for i in range(6)]})
+    assert resp.status_code == 422
