@@ -43,3 +43,28 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: contextai:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test the container
+        run: |
+          docker run -d --name app -p 8000:8000 contextai:ci
+          for i in $(seq 1 60); do curl -sf localhost:8000/health && break; sleep 2; done
+          curl -sf localhost:8000/health
+          curl -sf localhost:8000/ | grep -q '<div id="root">'
+          curl -sf localhost:8000/chat | grep -q '<div id="root">'
+          curl -sf "localhost:8000/api/v1/conversations?user_id=smoke" | grep -q conversations
+      - name: Container logs
+        if: always()
+        run: docker logs app || true
