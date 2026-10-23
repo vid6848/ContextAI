@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { api, uploadWithProgress } from "@/lib/api"
+import { enablePush, pushState, type PushState } from "@/lib/push"
 import type { DocumentInfo, Reminder } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { formatWhen } from "@/lib/when"
@@ -135,7 +136,10 @@ function RemindersDialog({ open, onClose }: { open: boolean; onClose: () => void
     }, 300)
     return () => clearTimeout(timer)
   }, [when])
-  const [permission, setPermission] = useState(() => ("Notification" in window ? Notification.permission : "denied"))
+  const [push, setPush] = useState<PushState>("unsupported")
+  useEffect(() => {
+    if (open) pushState().then(setPush)
+  }, [open])
 
   // Captured when the list loads, so "overdue" is computed without reading the clock during render
   const [checkedAt, setCheckedAt] = useState(0)
@@ -178,17 +182,32 @@ function RemindersDialog({ open, onClose }: { open: boolean; onClose: () => void
             Add them here or just ask in chat: "remind me to call mom tomorrow at 6".
           </DialogDescription>
         </DialogHeader>
-        {permission === "default" && (
+        {push === "off" && (
           <div className="flex items-center justify-between gap-3 rounded-xl border border-brand/25 bg-brand/[0.06] px-3.5 py-2.5 text-sm">
-            <span>Get a notification when a reminder is due, even in another tab.</span>
+            <span>Get notified when a reminder is due, even when ContextAI isn't open.</span>
             <Button
               size="sm"
               variant="outline"
-              onClick={async () => setPermission(await Notification.requestPermission())}
+              onClick={async () => {
+                try {
+                  const state = await enablePush()
+                  setPush(state)
+                  if (state === "on") toast.success("Notifications are on")
+                  if (state === "denied") toast.error("Notifications are blocked in your browser settings.")
+                } catch {
+                  toast.error("Couldn't turn on notifications.")
+                }
+              }}
             >
               Turn on
             </Button>
           </div>
+        )}
+        {push === "on" && <p className="-mt-1 text-sm text-muted-foreground">Notifications are on for this browser.</p>}
+        {push === "denied" && (
+          <p className="-mt-1 text-sm text-muted-foreground">
+            Notifications are blocked for this site. Allow them in your browser settings to get reminder alerts.
+          </p>
         )}
         <form onSubmit={create} className="flex flex-col gap-2 sm:flex-row">
           <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Call the dentist" aria-label="Reminder" />

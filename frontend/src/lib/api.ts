@@ -95,6 +95,9 @@ export const api = {
     request<{ due_at: string | null }>(
       `/reminders/parse?when=${encodeURIComponent(when)}&timezone=${encodeURIComponent(timezone)}`,
     ).then((r) => r.due_at),
+  pushPublicKey: () => request<{ public_key: string }>("/push/public-key").then((r) => r.public_key),
+  pushSubscribe: (subscription: PushSubscriptionJSON) =>
+    request("/push/subscribe", { method: "POST", body: JSON.stringify(subscription) }),
   dueReminders: () => request<{ reminders: Reminder[] }>("/reminders/due").then((r) => r.reminders),
   markNotified: (id: number) => request(`/reminders/${id}/notified`, { method: "PATCH" }),
   completeReminder: (id: number) => request(`/reminders/${id}/complete`, { method: "PATCH" }),

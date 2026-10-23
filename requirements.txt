@@ -20,6 +20,8 @@ pymupdf==1.28.2
 
 # Reminders: natural-language times
 dateparser==1.4.3
+# Reminders: browser push notifications
+pywebpush==2.5.0
 
 # Intent classification
 scikit-learn==1.9.1

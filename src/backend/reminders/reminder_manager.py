@@ -138,6 +138,20 @@ class ReminderManager:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def get_all_due(self, now: datetime | None = None) -> list[dict[str, Any]]:
+        """Due, un-notified pending reminders across all users (for the push scheduler)."""
+        moment = (now or datetime.now(UTC)).isoformat()
+        with self.get_connection() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT {COLUMNS} FROM reminders
+                WHERE status = 'pending' AND notified_at IS NULL AND due_at IS NOT NULL AND due_at <= ?
+                ORDER BY due_at ASC LIMIT 500
+                """,
+                (moment,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def mark_notified(self, reminder_id: int, user_id: str) -> bool:
         """Record that the user was notified, so each reminder alerts once."""
         with self.get_connection() as conn:
