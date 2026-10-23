@@ -10,6 +10,7 @@ class AgentState(TypedDict, total=False):
 
     message: str
     user_id: str
+    conversation_id: str
     intent: str
     current_intent: str
     confidence: float
