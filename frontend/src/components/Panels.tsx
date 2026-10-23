@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { api, uploadWithProgress } from "@/lib/api"
 import type { DocumentInfo, Reminder } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { formatWhen } from "@/lib/when"
 import { useChat } from "@/store/chat"
 
 export function Panels({ open, onClose }: { open: Panel | null; onClose: () => void }) {
@@ -125,8 +126,21 @@ function RemindersDialog({ open, onClose }: { open: boolean; onClose: () => void
   const [reminders, setReminders] = useState<Reminder[]>([])
   const [text, setText] = useState("")
   const [when, setWhen] = useState("")
+  const [permission, setPermission] = useState(() => ("Notification" in window ? Notification.permission : "denied"))
 
-  const refresh = useCallback(() => api.listReminders().then(setReminders).catch(() => setReminders([])), [])
+  // Captured when the list loads, so "overdue" is computed without reading the clock during render
+  const [checkedAt, setCheckedAt] = useState(0)
+  const refresh = useCallback(
+    () =>
+      api
+        .listReminders()
+        .then((list) => {
+          setReminders(list)
+          setCheckedAt(Date.now())
+        })
+        .catch(() => setReminders([])),
+    [],
+  )
   useEffect(() => {
     if (open) refresh()
   }, [open, refresh])
@@ -135,7 +149,7 @@ function RemindersDialog({ open, onClose }: { open: boolean; onClose: () => void
     e.preventDefault()
     if (!text.trim() || !when) return
     try {
-      await api.createReminder(text, when.replace("T", " "))
+      await api.createReminder(text, when)
       setText("")
       setWhen("")
       toast.success("Reminder added")
@@ -150,11 +164,31 @@ function RemindersDialog({ open, onClose }: { open: boolean; onClose: () => void
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Reminders</DialogTitle>
-          <DialogDescription>Things you asked ContextAI to keep track of.</DialogDescription>
+          <DialogDescription>
+            Add them here or just ask in chat: "remind me to call mom tomorrow at 6".
+          </DialogDescription>
         </DialogHeader>
+        {permission === "default" && (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-brand/25 bg-brand/[0.06] px-3.5 py-2.5 text-sm">
+            <span>Get a notification when a reminder is due, even in another tab.</span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => setPermission(await Notification.requestPermission())}
+            >
+              Turn on
+            </Button>
+          </div>
+        )}
         <form onSubmit={create} className="flex flex-col gap-2 sm:flex-row">
           <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Call the dentist" aria-label="Reminder" />
-          <Input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} aria-label="When" className="sm:w-56" />
+          <Input
+            value={when}
+            onChange={(e) => setWhen(e.target.value)}
+            placeholder="tomorrow at 5pm"
+            aria-label="When"
+            className="sm:w-48"
+          />
           <Button type="submit" disabled={!text.trim() || !when}>
             Add
           </Button>
@@ -179,7 +213,9 @@ function RemindersDialog({ open, onClose }: { open: boolean; onClose: () => void
                 </button>
                 <div className="min-w-0 flex-1">
                   <p className={cn("truncate text-sm", done && "text-muted-foreground line-through")}>{r.reminder_text}</p>
-                  <p className="text-xs text-muted-foreground">{r.scheduled_time}</p>
+                  <p className={cn("text-xs text-muted-foreground", !done && r.due_at && checkedAt > 0 && Date.parse(r.due_at) < checkedAt && "text-step-error")}>
+                    {r.due_at ? formatWhen(r.due_at) : r.scheduled_time}
+                  </p>
                 </div>
                 <Button
                   variant="ghost"

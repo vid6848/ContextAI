@@ -72,6 +72,9 @@ class ChatRequest(BaseModel):
     conversation_id: str | None = Field(
         default=None, description="Existing conversation to continue; a new one is created when omitted"
     )
+    timezone: str | None = Field(
+        default=None, max_length=64, description="User's IANA timezone, for dates and reminders"
+    )
     attachments: list[Annotated[str, Field(min_length=1, max_length=255)]] = Field(
         default_factory=list, max_length=5, description="Names of uploaded PDFs this message is about"
     )
@@ -127,7 +130,10 @@ class ReminderCreateRequest(BaseModel):
     """Schema for creating a new reminder."""
 
     reminder_text: str = Field(..., min_length=1, description="Text description of the reminder")
-    scheduled_time: str = Field(..., min_length=1, description="Due or scheduled timestamp/string")
+    scheduled_time: str = Field(
+        ..., min_length=1, max_length=120, description='When: ISO timestamp or natural language ("tomorrow at 5pm")'
+    )
+    timezone: str | None = Field(default=None, max_length=64, description="IANA timezone, e.g. Asia/Kolkata")
     user_id: str = Field(default="default_user", pattern=USER_ID_PATTERN, description="Identifier for the user")
 
 
@@ -169,6 +175,7 @@ def _agent_input(request: ChatRequest, conversation: dict[str, Any]) -> dict[str
         "user_id": request.user_id,
         "conversation_id": conversation["id"],
         "attachments": request.attachments,
+        "timezone": request.timezone,
     }
 
 
@@ -548,6 +555,7 @@ def create_reminder(request: ReminderCreateRequest):
             user_id=request.user_id,
             reminder_text=request.reminder_text,
             scheduled_time=request.scheduled_time,
+            timezone=request.timezone,
         )
         return {"success": True, "reminder": reminder}
     except ValueError as err:
@@ -563,6 +571,20 @@ def get_reminders(
     mgr = get_reminder_manager()
     reminders = mgr.get_reminders(user_id=user_id, status=status)
     return {"success": True, "reminders": reminders}
+
+
+@router.get("/reminders/due")
+def get_due_reminders(user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
+    """Reminders that are due now and haven't been notified yet (polled by the web app)."""
+    return {"reminders": get_reminder_manager().get_due(user_id)}
+
+
+@router.patch("/reminders/{reminder_id}/notified")
+def mark_reminder_notified(reminder_id: int, user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
+    """Record that the user has been notified about a reminder."""
+    if not get_reminder_manager().mark_notified(reminder_id, user_id):
+        raise HTTPException(status_code=404, detail="Reminder not found.")
+    return {"success": True}
 
 
 @router.patch("/reminders/{reminder_id}/complete")

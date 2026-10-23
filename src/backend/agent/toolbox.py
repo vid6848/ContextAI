@@ -1,10 +1,13 @@
 """Function-calling tools exposed to the LLM, and their execution for one agent run."""
 
 import json
-from datetime import date
+from datetime import date, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from src.backend.rag.pipeline import DocumentRAGPipeline
+from src.backend.reminders.reminder_manager import ReminderManager
+from src.backend.reminders.timeparse import resolve_timezone
 from src.backend.tools.calculator import CalculatorTool
 from src.backend.tools.crypto import CryptoTool
 from src.backend.tools.weather import WeatherTool
@@ -48,6 +51,16 @@ TOOL_SPECS: list[dict[str, Any]] = [
         ["query"],
     ),
     _fn(
+        "create_reminder",
+        "Set a reminder for the user. Resolve relative times yourself using the current date and time.",
+        {
+            "text": {"type": "string", "description": "What to remind them about, e.g. 'Call mom'"},
+            "when": {"type": "string", "description": "ISO 8601 local date-time, e.g. 2026-10-24T17:00"},
+        },
+        ["text", "when"],
+    ),
+    _fn("list_reminders", "List the user's upcoming (pending) reminders.", {}, []),
+    _fn(
         "search_documents",
         "Search the PDFs the user uploaded. Returns numbered passages with document name and page.",
         {"query": {"type": "string", "description": "What to look for in the user's documents"}},
@@ -62,9 +75,11 @@ TOOL_LABELS: dict[str, tuple[str, str]] = {
     "get_crypto_price": ("Fetching crypto prices", "CoinGecko"),
     "web_search": ("Searching the web", "Tavily web search"),
     "search_documents": ("Searching your documents", "Document search"),
+    "create_reminder": ("Setting a reminder", "Reminders"),
+    "list_reminders": ("Checking your reminders", "Reminders"),
 }
 # Function name -> card type the UI renders for a successful result
-CARD_KINDS = {"get_weather": "weather", "get_crypto_price": "crypto"}
+CARD_KINDS = {"get_weather": "weather", "get_crypto_price": "crypto", "create_reminder": "reminder"}
 
 
 class ToolBox:
@@ -82,14 +97,18 @@ class ToolBox:
         crypto: CryptoTool,
         web: TavilySearchTool,
         rag: DocumentRAGPipeline,
+        reminders: ReminderManager,
         user_id: str,
+        timezone: str | None = None,
     ) -> None:
         self.calculator = calculator
         self.weather = weather
         self.crypto = crypto
         self.web = web
         self.rag = rag
+        self.reminders = reminders
         self.user_id = user_id
+        self.timezone = timezone
         self.sources: list[dict[str, Any]] = []
         self.cards: list[dict[str, Any]] = []
 
@@ -105,12 +124,36 @@ class ToolBox:
             result = self._web_search(str(args.get("query", "")))
         elif name == "search_documents":
             result = self._search_documents(str(args.get("query", "")))
+        elif name == "create_reminder":
+            result = self._create_reminder(str(args.get("text", "")), str(args.get("when", "")))
+        elif name == "list_reminders":
+            pending = self.reminders.get_reminders(self.user_id, status="pending")
+            result = {"success": True, "timezone": self._tz.key, "reminders": [
+                {"text": r["reminder_text"], "due": self._local(r["due_at"]) if r["due_at"] else r["scheduled_time"]}
+                for r in pending[:20]
+            ]}
         else:
             result = {"success": False, "error": f"Unknown tool '{name}'."}
 
         if result.get("success") and name in CARD_KINDS:
             self.cards.append({"tool": CARD_KINDS[name], "output": result})
         return result, self._for_model(result)
+
+    def _create_reminder(self, text: str, when: str) -> dict[str, Any]:
+        try:
+            r = self.reminders.create_reminder(self.user_id, text, when, timezone=self.timezone)
+        except ValueError as err:
+            return {"success": False, "error": str(err)}
+        # due_at (UTC) is for the UI card; the model gets local time so it doesn't announce UTC to the user
+        return {"success": True, "id": r["id"], "text": r["reminder_text"], "due_at": r["due_at"],
+                "due_local": self._local(r["due_at"]), "timezone": self._tz.key}
+
+    @property
+    def _tz(self) -> ZoneInfo:
+        return resolve_timezone(self.timezone)
+
+    def _local(self, iso_utc: str) -> str:
+        return datetime.fromisoformat(iso_utc).astimezone(self._tz).strftime("%A %d %B %Y, %H:%M")
 
     def _web_search(self, query: str) -> dict[str, Any]:
         res = self.web.search(query)

@@ -18,5 +18,8 @@ litellm==1.102.1
 chromadb==1.5.9
 pymupdf==1.28.2
 
+# Reminders: natural-language times
+dateparser==1.4.3
+
 # Intent classification
 scikit-learn==1.9.1
