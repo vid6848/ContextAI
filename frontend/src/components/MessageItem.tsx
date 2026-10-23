@@ -148,7 +148,7 @@ export function AssistantMessage({ message, isLast }: { message: ChatMessage; is
     setFeedback(message.key, feedback === rating ? null : rating)
       .then(() => feedback !== rating && toast("Thanks for the feedback"))
       .catch(() => toast.error("Couldn't save your feedback."))
-  const waiting = message.streaming && !message.content
+  const waiting = !!message.streaming && !message.content
   const showSources = useCitations((s) => s.show)
   const metaSources = message.meta?.sources
   const sources = metaSources ?? []
@@ -162,11 +162,10 @@ export function AssistantMessage({ message, isLast }: { message: ChatMessage; is
 
   return (
     <div className="group">
-      <AgentTrace meta={message.meta} streaming={message.streaming && !message.content} />
+      <AgentTrace meta={message.meta} streaming={waiting} />
       <ToolCard tool={message.meta?.tool_used} output={message.meta?.tool_output} />
       {sourceKind === "web" && sources.length > 0 && <WebSourceStrip sources={sources} messageKey={message.key} />}
       {message.content && <Markdown content={message.content} streaming={message.streaming} citations={citations} />}
-      {waiting && !message.meta?.steps?.length && <span className="stream-caret text-muted-foreground" />}
 
       {message.meta?.stopped && <p className="mt-2 text-sm text-muted-foreground">You stopped this answer.</p>}
       {message.error && (

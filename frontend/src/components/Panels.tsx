@@ -4,6 +4,7 @@ import { useNavigate } from "react-router"
 import { toast } from "sonner"
 
 import type { Panel } from "@/components/AppSidebar"
+import { ShortcutsDialog } from "@/components/ShortcutsDialog"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -17,6 +18,7 @@ export function Panels({ open, onClose }: { open: Panel | null; onClose: () => v
     <>
       <RemindersDialog open={open === "reminders"} onClose={onClose} />
       <ClearMemoryDialog open={open === "memory"} onClose={onClose} />
+      <ShortcutsDialog open={open === "shortcuts"} onClose={onClose} />
     </>
   )
 }

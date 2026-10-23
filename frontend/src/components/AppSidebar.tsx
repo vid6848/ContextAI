@@ -1,5 +1,7 @@
 import {
   Bell,
+  Info,
+  Keyboard,
   Monitor,
   Moon,
   MoreHorizontal,
@@ -26,14 +28,16 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { groupConversations } from "@/lib/dates"
+import { MOD } from "@/lib/platform"
 import type { Conversation } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { useChat } from "@/store/chat"
 
-export type Panel = "reminders" | "memory"
+export type Panel = "reminders" | "memory" | "shortcuts"
 
 interface AppSidebarProps {
   onNavigate?: () => void
@@ -78,6 +82,7 @@ export function AppSidebar({ onNavigate, onCollapse, onOpenPanel, searchRef }: A
         >
           <SquarePen className="size-4" />
           New chat
+          <kbd className="ml-auto font-sans text-xs text-muted-foreground">{MOD}⇧O</kbd>
         </Button>
         <div className="relative">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -85,7 +90,7 @@ export function AppSidebar({ onNavigate, onCollapse, onOpenPanel, searchRef }: A
             ref={searchRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search chats"
+            placeholder={`Search chats  ${MOD}K`}
             aria-label="Search chats"
             className="h-9 w-full rounded-md bg-transparent pr-2 pl-[34px] text-[14px] outline-none placeholder:text-muted-foreground hover:bg-sidebar-accent focus:bg-sidebar-accent"
           />
@@ -210,6 +215,7 @@ function ConversationRow({ conversation, onNavigate }: { conversation: Conversat
 
 function AccountMenu({ onOpenPanel }: { onOpenPanel: (panel: Panel) => void }) {
   const { theme, setTheme } = useTheme()
+  const navigate = useNavigate()
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -226,6 +232,13 @@ function AccountMenu({ onOpenPanel }: { onOpenPanel: (panel: Panel) => void }) {
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => onOpenPanel("memory")}>
           <Trash2 /> Clear chats and memory
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onOpenPanel("shortcuts")}>
+          <Keyboard /> Keyboard shortcuts
+          <DropdownMenuShortcut>{MOD}/</DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => navigate("/welcome")}>
+          <Info /> About ContextAI
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Appearance</DropdownMenuLabel>
