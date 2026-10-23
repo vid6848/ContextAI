@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { Composer, type ComposerHandle } from "@/components/Composer"
 import { EmptyState } from "@/components/EmptyState"
 import { AssistantMessage, UserMessage } from "@/components/MessageItem"
+import { SourcesPanel } from "@/components/Sources"
 import { useStickToBottom } from "@/hooks/useStickToBottom"
 import { useActiveMessages, useChat } from "@/store/chat"
 
@@ -98,6 +99,7 @@ export function ChatPage() {
           ContextAI can make mistakes. Check important information.
         </p>
       </div>
+      <SourcesPanel />
     </div>
   )
 }

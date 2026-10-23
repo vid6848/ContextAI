@@ -1,15 +1,19 @@
-import { Check, Copy, FileText, Pencil, RotateCcw, ThumbsDown, ThumbsUp } from "lucide-react"
+import { BookOpen, Check, Copy, FileText, Pencil, RotateCcw, ThumbsDown, ThumbsUp } from "lucide-react"
+import { useMemo } from "react"
 import { useState } from "react"
 import { toast } from "sonner"
 
 import { AgentTrace } from "@/components/AgentTrace"
 import { Markdown } from "@/components/Markdown"
+import { WebSourceStrip } from "@/components/Sources"
+import { ToolCard } from "@/components/ToolCards"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { ChatMessage } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { useChat } from "@/store/chat"
+import { useCitations } from "@/store/citations"
 
 function ActionButton({
   label,
@@ -145,11 +149,23 @@ export function AssistantMessage({ message, isLast }: { message: ChatMessage; is
       .then(() => feedback !== rating && toast("Thanks for the feedback"))
       .catch(() => toast.error("Couldn't save your feedback."))
   const waiting = message.streaming && !message.content
+  const showSources = useCitations((s) => s.show)
+  const metaSources = message.meta?.sources
+  const sources = metaSources ?? []
+  const sourceKind = sources[0]?.kind === "web" ? "web" : "document"
+  // Only numbered sources (answers since citations shipped) get clickable [n] markers
+  const citations = useMemo(() => {
+    if (!metaSources?.length || metaSources[0].n == null) return undefined
+    const kind = metaSources[0].kind === "web" ? ("web" as const) : ("document" as const)
+    return { count: metaSources.length, kind, onCite: (n: number) => showSources(message.key, n) }
+  }, [metaSources, showSources, message.key])
 
   return (
     <div className="group">
       <AgentTrace meta={message.meta} streaming={message.streaming && !message.content} />
-      {message.content && <Markdown content={message.content} streaming={message.streaming} />}
+      <ToolCard tool={message.meta?.tool_used} output={message.meta?.tool_output} />
+      {sourceKind === "web" && sources.length > 0 && <WebSourceStrip sources={sources} messageKey={message.key} />}
+      {message.content && <Markdown content={message.content} streaming={message.streaming} citations={citations} />}
       {waiting && !message.meta?.steps?.length && <span className="stream-caret text-muted-foreground" />}
 
       {message.meta?.stopped && <p className="mt-2 text-sm text-muted-foreground">You stopped this answer.</p>}
@@ -171,6 +187,17 @@ export function AssistantMessage({ message, isLast }: { message: ChatMessage; is
                 <ThumbsDown className={cn("size-4", feedback === "down" && "fill-current")} />
               </ActionButton>
             </>
+          )}
+          {citations && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1.5 px-2 text-muted-foreground"
+              onClick={() => showSources(message.key, 1)}
+            >
+              <BookOpen className="size-4" />
+              {sources.length} {sources.length === 1 ? "source" : "sources"}
+            </Button>
           )}
           {isLast && !busy && (
             <ActionButton label={message.error ? "Retry" : "Regenerate"} onClick={() => regenerate(message.key)}>
