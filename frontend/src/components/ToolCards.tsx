@@ -25,11 +25,11 @@ export function WeatherCard({ data }: { data: WeatherOutput }) {
       <div className="min-w-0 flex-1">
         <figcaption className="truncate text-sm text-muted-foreground">{data.location}</figcaption>
         <p className="flex items-baseline gap-2">
-          <span className="text-[34px] leading-tight font-medium tabular-nums tracking-tight">
+          <span className="text-[2.25rem] leading-tight font-medium tabular-nums tracking-tight">
             {round(data.temperature)}
             {unit}
           </span>
-          <span className="truncate text-[15px] capitalize text-foreground/80">{data.description ?? data.condition}</span>
+          <span className="truncate text-[0.9375rem] capitalize text-foreground/80">{data.description ?? data.condition}</span>
         </p>
       </div>
       <dl className="hidden shrink-0 space-y-1 text-sm text-muted-foreground sm:block">
@@ -74,10 +74,10 @@ export function CryptoCard({ data }: { data: CryptoOutput }) {
     <figure className="mb-4 flex flex-wrap items-end gap-x-6 gap-y-2 rounded-2xl border bg-card px-5 py-4" aria-label={`${name} price`}>
       <div>
         <figcaption className="text-sm capitalize text-muted-foreground">{name}</figcaption>
-        <p className="text-[30px] leading-tight font-medium tabular-nums tracking-tight">{usd.format(data.price_usd)}</p>
+        <p className="text-[1.875rem] leading-tight font-medium tabular-nums tracking-tight">{usd.format(data.price_usd)}</p>
       </div>
       {change != null && (
-        <p className={cn("pb-1 text-[15px] font-medium tabular-nums", up ? "text-step-docs" : "text-step-error")}>
+        <p className={cn("pb-1 text-[0.9375rem] font-medium tabular-nums", up ? "text-step-docs" : "text-step-error")}>
           {up ? "▲" : "▼"} {Math.abs(change).toFixed(2)}% <span className="font-normal text-muted-foreground">24h</span>
         </p>
       )}

@@ -32,7 +32,7 @@ export function WebSourceStrip({ sources, messageKey }: { sources: Source[]; mes
             onClick={() => show(messageKey, s.n)}
             className="flex h-full w-full flex-col justify-between gap-2 rounded-xl border bg-card p-2.5 text-left hover:border-ring/50"
           >
-            <span className="line-clamp-2 text-[13px] leading-snug">{s.title}</span>
+            <span className="line-clamp-2 text-[0.8125rem] leading-snug">{s.title}</span>
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Favicon url={s.url ?? ""} />
               <span className="truncate">{domainOf(s.url ?? "")}</span>
@@ -103,7 +103,7 @@ export function SourcesPanel() {
                   )}
                 </div>
                 {s.excerpt && (
-                  <blockquote className="mt-2.5 border-l-2 pl-3 text-[13.5px] leading-relaxed whitespace-pre-line text-foreground/80">
+                  <blockquote className="mt-2.5 border-l-2 pl-3 text-[0.875rem] leading-relaxed whitespace-pre-line text-foreground/80">
                     {s.excerpt}
                   </blockquote>
                 )}

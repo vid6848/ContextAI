@@ -90,7 +90,7 @@ export function UserMessage({ message }: { message: ChatMessage }) {
             }
             if (e.key === "Escape") setEditing(false)
           }}
-          className="min-h-20 resize-none border-0 bg-transparent p-1 text-[15.5px] shadow-none focus-visible:ring-0"
+          className="min-h-20 resize-none border-0 bg-transparent p-1 text-[1rem] shadow-none focus-visible:ring-0"
         />
         <div className="mt-2 flex justify-end gap-2">
           <Button variant="ghost" onClick={() => setEditing(false)}>
@@ -109,16 +109,16 @@ export function UserMessage({ message }: { message: ChatMessage }) {
       {message.meta?.attachments?.length ? (
         <ul className="mb-1.5 flex max-w-[85%] flex-wrap justify-end gap-1.5" aria-label="Attached files">
           {message.meta.attachments.map((name) => (
-            <li key={name} className="flex items-center gap-2 rounded-xl border bg-card py-1.5 pr-3 pl-2 text-[13px]">
+            <li key={name} className="flex items-center gap-2 rounded-xl border bg-card py-1.5 pr-3 pl-2 text-[0.8125rem]">
               <span className="flex size-6 items-center justify-center rounded-md bg-step-docs/10 text-step-docs">
                 <FileText className="size-3.5" />
               </span>
-              <span className="max-w-[200px] truncate">{name}</span>
+              <span className="max-w-[13rem] truncate">{name}</span>
             </li>
           ))}
         </ul>
       ) : null}
-      <div className="max-w-[85%] rounded-2xl rounded-br-md bg-secondary px-4 py-2.5 text-[15.5px] leading-relaxed whitespace-pre-wrap">
+      <div className="max-w-[85%] rounded-2xl rounded-br-md bg-secondary px-4 py-2.5 text-[1rem] leading-relaxed whitespace-pre-wrap">
         {message.content}
       </div>
       <div className="mt-1 flex opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 max-md:opacity-100">

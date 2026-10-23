@@ -86,7 +86,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     const el = textarea.current
     if (!el) return
     el.style.height = "auto"
-    el.style.height = `${Math.min(el.scrollHeight, 220)}px`
+    el.style.height = `${Math.min(el.scrollHeight, parseFloat(getComputedStyle(el).maxHeight) || 240)}px`
   }, [value])
 
   const uploading = attachments.some((a) => a.status === "uploading")
@@ -116,7 +116,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             <li
               key={a.id}
               className={cn(
-                "relative flex max-w-[240px] items-center gap-2.5 overflow-hidden rounded-xl border bg-background py-2 pr-8 pl-2.5",
+                "relative flex max-w-[15rem] items-center gap-2.5 overflow-hidden rounded-xl border bg-background py-2 pr-8 pl-2.5",
                 a.status === "error" && "border-step-error/40",
               )}
             >
@@ -135,7 +135,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                 )}
               </span>
               <span className="min-w-0">
-                <span className="block truncate text-[13px] font-medium">{a.name}</span>
+                <span className="block truncate text-[0.8125rem] font-medium">{a.name}</span>
                 <span className={cn("block truncate text-xs text-muted-foreground", a.status === "error" && "text-step-error")}>
                   {a.status === "uploading"
                     ? a.progress < 1
@@ -186,7 +186,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               onClick={() => fileInput.current?.click()}
               aria-label="Attach PDFs"
             >
-              <Paperclip className="size-[18px]" />
+              <Paperclip className="size-[1.125rem]" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>Attach PDFs (or drop them anywhere)</TooltipContent>
@@ -214,7 +214,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             }
           }}
           placeholder={ready.length ? "Ask about your PDF, or press Enter to summarize" : "Ask anything, or attach a PDF"}
-          className="max-h-[220px] flex-1 resize-none bg-transparent py-2 pl-1 text-[15.5px] leading-relaxed outline-none placeholder:text-muted-foreground"
+          className="max-h-[13.75rem] flex-1 resize-none bg-transparent py-2 pl-1 text-[1rem] leading-relaxed outline-none placeholder:text-muted-foreground"
         />
         <Button
           type="submit"
@@ -222,7 +222,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           disabled={!streaming && !canSend}
           aria-label={streaming ? "Stop generating" : "Send message"}
           title={streaming ? "Stop (Esc)" : uploading ? "Waiting for uploads" : "Send (Enter)"}
-          className={cn("size-9 shrink-0 rounded-full", streaming && "bg-foreground")}
+          className={cn(
+            "size-10 shrink-0 rounded-full border-0 text-white shadow-[0_6px_16px_-6px_rgb(91_71_245/0.6)] disabled:opacity-35 disabled:shadow-none",
+            streaming ? "bg-foreground text-background" : "bg-brand-gradient hover:brightness-110",
+          )}
         >
           {streaming ? <Square className="size-3.5 fill-current" /> : <ArrowUp className="size-4.5" />}
         </Button>

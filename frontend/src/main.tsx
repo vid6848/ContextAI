@@ -1,7 +1,7 @@
 import { ThemeProvider } from "next-themes"
 import { lazy, StrictMode, Suspense } from "react"
 import { createRoot } from "react-dom/client"
-import { createBrowserRouter } from "react-router"
+import { createBrowserRouter, Navigate } from "react-router"
 import { RouterProvider } from "react-router/dom"
 
 import { AppLayout } from "@/App"
@@ -10,7 +10,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { ChatPage } from "@/pages/ChatPage"
 import { NotFoundPage } from "@/pages/NotFoundPage"
 
-const WelcomePage = lazy(() => import("@/pages/WelcomePage"))
+const LandingPage = lazy(() => import("@/pages/LandingPage"))
 
 import "./index.css"
 
@@ -19,18 +19,19 @@ const router = createBrowserRouter([
     element: <AppLayout />,
     errorElement: <NotFoundPage />,
     children: [
-      { path: "/", element: <ChatPage /> },
+      { path: "/chat", element: <ChatPage /> },
       { path: "/c/:id", element: <ChatPage /> },
     ],
   },
   {
-    path: "/welcome",
+    path: "/",
     element: (
       <Suspense fallback={null}>
-        <WelcomePage />
+        <LandingPage />
       </Suspense>
     ),
   },
+  { path: "/welcome", element: <Navigate to="/" replace /> },
   { path: "*", element: <NotFoundPage /> },
 ])
 

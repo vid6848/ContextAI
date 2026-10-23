@@ -58,7 +58,7 @@ export function AgentTrace({
     : `${steps.length} ${steps.length === 1 ? "step" : "steps"} in ${formatDuration(total)}`
 
   return (
-    <div className="mb-3 text-[13.5px]">
+    <div className="mb-3 text-[0.875rem]">
       <button
         type="button"
         onClick={() => !streaming && setUserOpen((o) => !o)}
