@@ -184,17 +184,22 @@
   border-radius: 5px;
   background: var(--muted);
 }
+.md .code-block {
+  border-radius: 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
 .md pre {
   font-family: var(--font-mono);
   font-size: 13.5px;
   line-height: 1.6;
   padding: 14px 16px;
-  border-radius: 12px;
-  background: var(--card);
-  border: 1px solid var(--border);
   overflow-x: auto;
 }
-.md table { width: 100%; border-collapse: collapse; font-size: 0.94em; display: block; overflow-x: auto; }
+.md .table-wrap { overflow-x: auto; }
+.md table { width: 100%; border-collapse: collapse; font-size: 0.94em; }
+.md .katex-display { overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
 .md th, .md td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
 .md th { background: var(--muted); font-weight: 600; }
 

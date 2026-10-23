@@ -6,7 +6,7 @@ import logging
 import os
 import tempfile
 import threading
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
@@ -111,6 +111,12 @@ class ConversationRenameRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
 
 
+class FeedbackRequest(BaseModel):
+    """Thumbs up/down on an assistant answer; null clears it."""
+
+    rating: Literal["up", "down"] | None = None
+
+
 class ReminderCreateRequest(BaseModel):
     """Schema for creating a new reminder."""
 
@@ -202,6 +208,22 @@ def get_conversation_messages(
         "conversation": conversation,
         "messages": sql_mgr.get_conversation_messages(conversation_id, user_id),
     }
+
+
+@router.put("/conversations/{conversation_id}/messages/{message_id}/feedback")
+def set_message_feedback(
+    conversation_id: str,
+    message_id: int,
+    request: FeedbackRequest,
+    user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN),
+):
+    """Record 👍/👎 feedback on an assistant answer."""
+    sql_mgr = get_default_sql_manager()
+    message = sql_mgr.get_message(message_id, conversation_id, user_id)
+    if message is None or message["role"] != "assistant":
+        raise HTTPException(status_code=404, detail="Message not found.")
+    sql_mgr.update_message_metadata(message_id, conversation_id, user_id, {"feedback": request.rating})
+    return {"success": True, "rating": request.rating}
 
 
 @router.patch("/conversations/{conversation_id}")

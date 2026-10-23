@@ -89,3 +89,25 @@ def test_legacy_database_is_migrated(tmp_path):
     conversation = manager.create_conversation(user_id="a")
     manager.save_message(user_id="a", role="user", message="new", conversation_id=conversation["id"])
     assert [m["message"] for m in manager.get_conversation_messages(conversation["id"], "a")] == ["new"]
+
+
+@patch("src.backend.llm.client.LLMClient.generate_response", return_value="Here you go.")
+def test_feedback_is_stored_on_assistant_messages(_mock):
+    data = client.post("/api/v1/chat", json={"message": "Tell me a fact", "user_id": "fb"}).json()
+    cid, aid, uid = data["conversation_id"], data["assistant_message_id"], data["user_message_id"]
+    url = f"/api/v1/conversations/{cid}/messages/{aid}/feedback"
+
+    assert client.put(url, params={"user_id": "fb"}, json={"rating": "down"}).status_code == 200
+    messages = client.get(f"/api/v1/conversations/{cid}/messages", params={"user_id": "fb"}).json()["messages"]
+    assert messages[1]["metadata"]["feedback"] == "down"
+    assert messages[1]["metadata"]["intent"]  # existing metadata is preserved
+
+    client.put(url, params={"user_id": "fb"}, json={"rating": None})
+    messages = client.get(f"/api/v1/conversations/{cid}/messages", params={"user_id": "fb"}).json()["messages"]
+    assert "feedback" not in messages[1]["metadata"]
+
+    # Only the owner, only assistant messages, only valid ratings
+    assert client.put(url, params={"user_id": "someone-else"}, json={"rating": "up"}).status_code == 404
+    user_url = f"/api/v1/conversations/{cid}/messages/{uid}/feedback"
+    assert client.put(user_url, params={"user_id": "fb"}, json={"rating": "up"}).status_code == 404
+    assert client.put(url, params={"user_id": "fb"}, json={"rating": "meh"}).status_code == 422

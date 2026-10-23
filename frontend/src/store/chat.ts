@@ -1,7 +1,7 @@
 import { create } from "zustand"
 
 import { api, streamChat, type ServerMessage } from "@/lib/api"
-import type { AgentStep, ChatMessage, Conversation, MessageMeta } from "@/lib/types"
+import type { AgentStep, ChatMessage, Conversation, Feedback, MessageMeta } from "@/lib/types"
 
 /** Messages of a chat that hasn't been sent yet live under this key until the server assigns an id. */
 export const DRAFT = "__draft__"
@@ -39,6 +39,7 @@ interface ChatState {
   stop: () => void
   regenerate: (assistantKey: string) => void
   edit: (userKey: string, text: string) => void
+  setFeedback: (messageKey: string, rating: Feedback | null) => Promise<void>
   rename: (id: string, title: string) => Promise<void>
   remove: (id: string) => Promise<void>
   reset: () => void
@@ -184,6 +185,20 @@ export const useChat = create<ChatState>((set, get) => {
 
     edit(userKey, text) {
       void get().send(text, { replaceFromKey: userKey })
+    },
+
+    async setFeedback(messageKey, rating) {
+      const ck = chatKey()
+      const message = get().messages[ck]?.find((m) => m.key === messageKey)
+      if (!message?.id || ck === DRAFT) return
+      const previous = message.meta?.feedback
+      patchMessage(ck, messageKey, (m) => ({ ...m, meta: { ...m.meta, feedback: rating ?? undefined } }))
+      try {
+        await api.setFeedback(ck, message.id, rating)
+      } catch (err) {
+        patchMessage(ck, messageKey, (m) => ({ ...m, meta: { ...m.meta, feedback: previous } }))
+        throw err
+      }
     },
 
     async rename(id, title) {
