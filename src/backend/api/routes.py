@@ -18,6 +18,7 @@ from src.backend.agent.graph import (
     get_default_rag_pipeline,
     get_default_sql_manager,
     get_default_vector_store,
+    tool_card,
 )
 from src.backend.core.config import settings
 from src.backend.core.rate_limit import rate_limit
@@ -355,6 +356,7 @@ async def chat_stream_endpoint(request: ChatRequest):
                 "confidence": float(final.get("confidence", 0.0)),
                 "tool_used": final.get("tool_name"),
                 "sources": final.get("rag_sources"),
+                "tool_output": tool_card(final),
                 "stopped": bool(final.get("stopped")),
                 "user_message_id": final.get("user_message_id"),
                 "assistant_message_id": final.get("assistant_message_id"),

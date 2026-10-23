@@ -210,28 +210,24 @@ class DocumentRAGPipeline:
         return chunks
 
     def format_context(self, chunks: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
-        """Format retrieved chunks into context string for LLM and extract unique sources."""
+        """Number retrieved chunks for the LLM and return matching citation sources.
+
+        Passage [n] in the context is source n, which carries the exact excerpt so the UI can show
+        what each inline [n] citation refers to.
+        """
         if not chunks:
             return "", []
 
         context_lines: list[str] = []
         sources: list[dict[str, Any]] = []
-        seen_sources = set()
-
-        for chunk in chunks:
+        for n, chunk in enumerate(chunks, start=1):
             doc_name = chunk.get("document_name", "Document")
             page_num = chunk.get("page_number", 1)
             content = chunk.get("content", "")
+            context_lines.append(f"[{n}] {doc_name}, page {page_num}\n{content}")
+            sources.append({"n": n, "kind": "document", "document": doc_name, "page": page_num, "excerpt": content})
 
-            source_key = (doc_name, page_num)
-            if source_key not in seen_sources:
-                seen_sources.add(source_key)
-                sources.append({"document": doc_name, "page": page_num})
-
-            context_lines.append(f"[Source: {doc_name}, Page: {page_num}]\n{content}")
-
-        formatted_context = "\n\n".join(context_lines)
-        return formatted_context, sources
+        return "\n\n".join(context_lines), sources
 
     def clear(self) -> None:
         """Clear all indexed document chunks."""
