@@ -1,5 +1,6 @@
 import {
   Bell,
+  Brain,
   FileText,
   Info,
   Keyboard,
@@ -228,6 +229,9 @@ function AccountMenu({ onOpenPanel }: { onOpenPanel: (panel: Panel) => void }) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="start" className="w-60">
+        <DropdownMenuItem onSelect={() => navigate("/memory")}>
+          <Brain /> Memory
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => onOpenPanel("documents")}>
           <FileText /> Your documents
         </DropdownMenuItem>

@@ -8,7 +8,7 @@ import tempfile
 import threading
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -24,6 +24,7 @@ from src.backend.agent.graph import (
 from src.backend.core.config import settings
 from src.backend.core.rate_limit import rate_limit
 from src.backend.llm.client import LLMServiceUnavailableError
+from src.backend.memory.extractor import update_long_term_memory
 from src.backend.memory.sql_db import DEFAULT_CONVERSATION_TITLE
 from src.backend.reminders.reminder_manager import ReminderManager
 
@@ -264,8 +265,22 @@ def delete_conversation(conversation_id: str, user_id: str = Query(default="defa
 # Chat Endpoints
 # ============================================================================
 
+def remember(request: ChatRequest, final: dict[str, Any]) -> list[dict[str, Any]]:
+    """Update long-term memory from the user's message after the reply exists, and note it on the reply."""
+    if settings.memory_mode != "llm" or not final.get("response") or final.get("stopped"):
+        return []
+    changes = update_long_term_memory(
+        get_default_llm_client(), get_default_vector_store(), request.user_id, request.message
+    )
+    if changes and final.get("assistant_message_id") and final.get("conversation_id"):
+        get_default_sql_manager().update_message_metadata(
+            final["assistant_message_id"], final["conversation_id"], request.user_id, {"memory": changes}
+        )
+    return changes
+
+
 @router.post("/chat", response_model=ChatResponse, dependencies=[Depends(chat_rate_limit)])
-def chat_endpoint(request: ChatRequest):
+def chat_endpoint(request: ChatRequest, background: BackgroundTasks):
     """Endpoint for interacting with the ContextAI agent via LangGraph."""
     conversation = resolve_conversation(request)
     agent = get_agent()
@@ -293,6 +308,7 @@ def chat_endpoint(request: ChatRequest):
             status_code=502, detail="Something went wrong while generating a response. Please try again."
         ) from err
 
+    background.add_task(remember, request, result)
     return ChatResponse(
         conversation_id=conversation["id"],
         message=result.get("message", request.message),
@@ -364,6 +380,9 @@ async def chat_stream_endpoint(request: ChatRequest):
                 "user_message_id": final.get("user_message_id"),
                 "assistant_message_id": final.get("assistant_message_id"),
             })
+            changes = remember(request, final)
+            if changes:
+                publish({"type": "memory", "changes": changes})
             # A brand-new chat gets a proper title once the first answer exists
             if request.conversation_id is None and final.get("response") and not final.get("stopped"):
                 title = generate_title(request.message, final["response"])
@@ -402,6 +421,50 @@ def clear_memory_endpoint(request: ClearMemoryRequest):
     get_default_sql_manager().clear_history(user_id=request.user_id)
     get_default_vector_store().delete_user_memories(user_id=request.user_id)
     return {"success": True, "message": "Your conversations and memories have been cleared."}
+
+
+class MemoryRequest(BaseModel):
+    """A fact to add, or the new text of an existing memory."""
+
+    fact: str = Field(..., min_length=1, max_length=300)
+
+
+@router.get("/memories")
+def list_memories(user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
+    """Everything ContextAI remembers about the user."""
+    return {"memories": get_default_vector_store().list_memories(user_id)}
+
+
+@router.post("/memories", status_code=201)
+def add_memory(request: MemoryRequest, user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
+    """Teach ContextAI a fact directly."""
+    memory_id = get_default_vector_store().add_memory(request.fact.strip(), user_id, {"source": "manual"})
+    return {"id": memory_id, "fact": request.fact.strip()}
+
+
+@router.patch("/memories/{memory_id}")
+def edit_memory(
+    memory_id: str, request: MemoryRequest, user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)
+):
+    """Correct a memory."""
+    if not get_default_vector_store().update_memory(memory_id, user_id, request.fact.strip()):
+        raise HTTPException(status_code=404, detail="Memory not found.")
+    return {"success": True}
+
+
+@router.delete("/memories/{memory_id}")
+def forget_memory(memory_id: str, user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
+    """Forget one memory."""
+    if not get_default_vector_store().delete_memory(memory_id, user_id):
+        raise HTTPException(status_code=404, detail="Memory not found.")
+    return {"success": True}
+
+
+@router.delete("/memories")
+def forget_all_memories(user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
+    """Forget everything about the user (chats are kept)."""
+    get_default_vector_store().delete_user_memories(user_id)
+    return {"success": True}
 
 
 # ============================================================================

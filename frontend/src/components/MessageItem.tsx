@@ -1,4 +1,5 @@
-import { BookOpen, Check, Copy, FileText, Pencil, RotateCcw, ThumbsDown, ThumbsUp } from "lucide-react"
+import { BookOpen, Brain, Check, Copy, FileText, Pencil, RotateCcw, ThumbsDown, ThumbsUp } from "lucide-react"
+import { Link } from "react-router"
 import { useMemo } from "react"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -174,6 +175,23 @@ export function AssistantMessage({ message, isLast }: { message: ChatMessage; is
       {webSources.length > 0 && <WebSourceStrip sources={webSources} messageKey={message.key} />}
       {message.content && <Markdown content={message.content} streaming={message.streaming} citations={citations} />}
 
+      {message.meta?.memory?.length ? (
+        <Link
+          to="/memory"
+          className="mt-3 inline-flex max-w-full items-center gap-2 rounded-full border border-step-memory/25 bg-step-memory/[0.08] py-1 pr-3.5 pl-2 text-[0.85rem] text-foreground/85 transition-colors hover:border-step-memory/50"
+        >
+          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-step-memory/15 text-step-memory">
+            <Brain className="size-3" />
+          </span>
+          <span className="truncate">
+            <span className="font-medium text-step-memory">Memory updated</span>
+            {": "}
+            {message.meta.memory
+              .map((c) => (c.op === "delete" ? `forgot "${c.fact}"` : c.fact))
+              .join("; ")}
+          </span>
+        </Link>
+      ) : null}
       {message.meta?.stopped && <p className="mt-2 text-sm text-muted-foreground">You stopped this answer.</p>}
       {message.error && (
         <p role="alert" className="mt-2 rounded-lg border border-step-error/30 bg-step-error/5 px-3 py-2 text-sm text-step-error">
