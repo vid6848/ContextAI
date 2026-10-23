@@ -11,7 +11,9 @@ const PROMPTS = [
 export function EmptyState({ onPick }: { onPick: (text: string) => void }) {
   return (
     <div className="mx-auto flex w-full max-w-[var(--content-width)] flex-1 flex-col justify-center px-4 pb-8">
-      <h1 className="text-[2.125rem] font-medium tracking-[-0.015em]">What can I help with?</h1>
+      <h1 className="font-display text-[clamp(2.25rem,3.4vw,3.25rem)] leading-tight font-semibold tracking-[-0.03em]">
+        What can I help with?
+      </h1>
       <p className="mt-2 max-w-[52ch] text-muted-foreground">
         ContextAI remembers what you tell it, checks live data, and reads your PDFs. Every answer shows the steps it
         took.

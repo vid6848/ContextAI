@@ -222,7 +222,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           disabled={!streaming && !canSend}
           aria-label={streaming ? "Stop generating" : "Send message"}
           title={streaming ? "Stop (Esc)" : uploading ? "Waiting for uploads" : "Send (Enter)"}
-          className={cn("size-9 shrink-0 rounded-full", streaming && "bg-foreground")}
+          className={cn(
+            "size-10 shrink-0 rounded-full border-0 text-white shadow-[0_6px_16px_-6px_rgb(91_71_245/0.6)] disabled:opacity-35 disabled:shadow-none",
+            streaming ? "bg-foreground text-background" : "bg-brand-gradient hover:brightness-110",
+          )}
         >
           {streaming ? <Square className="size-3.5 fill-current" /> : <ArrowUp className="size-4.5" />}
         </Button>

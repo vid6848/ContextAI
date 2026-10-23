@@ -1,6 +1,6 @@
 import { Menu, PanelLeftOpen, SquarePen } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
-import { Outlet, useLocation, useNavigate } from "react-router"
+import { Outlet, useNavigate } from "react-router"
 
 import { AppSidebar, type Panel } from "@/components/AppSidebar"
 import { Panels } from "@/components/Panels"
@@ -28,20 +28,6 @@ export function AppLayout() {
     void loadConversations()
   }, [loadConversations])
 
-  // First visit with no chats: show the landing page once
-  const location = useLocation()
-  const conversationsLoaded = useChat((s) => s.conversationsLoaded)
-  const hasChats = useChat((s) => s.conversations.length > 0)
-  useEffect(() => {
-    if (!conversationsLoaded || hasChats || location.pathname !== "/") return
-    let welcomed = true
-    try {
-      welcomed = localStorage.getItem("contextai_welcomed") === "1"
-    } catch {
-      /* storage unavailable: skip the landing page */
-    }
-    if (!welcomed) navigate("/welcome", { replace: true })
-  }, [conversationsLoaded, hasChats, location.pathname, navigate])
 
 
   const setCollapsedPersist = (value: boolean) => {
@@ -66,7 +52,7 @@ export function AppLayout() {
         setTimeout(() => searchRef.current?.focus(), 50)
       } else if (key === "o" && e.shiftKey) {
         e.preventDefault()
-        navigate("/")
+        navigate("/chat")
       } else if (key === "/") {
         e.preventDefault()
         setPanel("shortcuts")
@@ -118,13 +104,13 @@ export function AppLayout() {
               >
                 <PanelLeftOpen className="size-[1.125rem]" />
               </Button>
-              <Button variant="ghost" size="icon" className="hidden md:inline-flex" onClick={() => navigate("/")} aria-label="New chat">
+              <Button variant="ghost" size="icon" className="hidden md:inline-flex" onClick={() => navigate("/chat")} aria-label="New chat">
                 <SquarePen className="size-[1.125rem]" />
               </Button>
             </>
           )}
           <h1 className="truncate px-2 text-[0.9rem] font-medium text-foreground/80">{title ?? ""}</h1>
-          <Button variant="ghost" size="icon" className="ml-auto md:hidden" onClick={() => navigate("/")} aria-label="New chat">
+          <Button variant="ghost" size="icon" className="ml-auto md:hidden" onClick={() => navigate("/chat")} aria-label="New chat">
             <SquarePen className="size-[1.125rem]" />
           </Button>
         </header>

@@ -27,7 +27,7 @@ export function ChatPage() {
   useEffect(() => {
     openConversation(id ?? null).catch(() => {
       toast.error("That chat doesn't exist or was deleted.")
-      navigate("/", { replace: true })
+      navigate("/chat", { replace: true })
     })
     composer.current?.focus()
   }, [id, openConversation, navigate])
