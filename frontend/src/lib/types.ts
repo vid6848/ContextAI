@@ -43,8 +43,11 @@ export interface MessageMeta {
   confidence?: number | null
   tool_used?: string | null
   sources?: Source[] | null
-  /** Structured result of the weather/crypto tool, rendered as a card. */
+  /** Structured result of the weather/crypto tool, rendered as a card (single-tool answers). */
   tool_output?: Record<string, unknown> | null
+  /** Every card produced while answering; several when the model chained tools. */
+  cards?: { tool: string; output: Record<string, unknown> }[]
+  tools_used?: string[]
   steps?: AgentStep[]
   stopped?: boolean
   feedback?: Feedback

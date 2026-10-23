@@ -29,5 +29,10 @@ class AgentState(TypedDict, total=False):
     # Timed agent steps (memory recall, routing, tool calls) shown in the UI and stored with the answer
     steps: Annotated[list[dict[str, Any]], operator.add]
     stopped: bool
+    # "classifier" (fixed tool path) or "llm" (function calling), decided by the router
+    route: str
+    # UI cards from tool results ({tool: weather|crypto, output}); several when the LLM chains tools
+    cards: list[dict[str, Any]]
+    tools_used: list[str]
     user_message_id: int
     assistant_message_id: int
