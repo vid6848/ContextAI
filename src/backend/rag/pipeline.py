@@ -3,12 +3,15 @@
 import hashlib
 import logging
 import os
+from datetime import UTC, datetime
 from typing import Any
 
 import chromadb
 import pymupdf
 
 from src.backend.core.config import settings
+from src.backend.rag.rerank import rerank
+from src.backend.rag.structure import chunk_document_text, extract_blocks, structure_chunks
 
 logger = logging.getLogger(__name__)
 
@@ -98,15 +101,16 @@ class DocumentRAGPipeline:
     def ingest_pdf(
         self,
         file_path: str,
-        chunk_size: int = 500,
-        chunk_overlap: int = 50,
+        chunk_size: int = 900,
+        chunk_overlap: int = 0,
         user_id: str | None = None,
         document_name: str | None = None,
     ) -> dict[str, Any]:
-        """Extract text from a PDF file with PyMuPDF, chunk it, and store with metadata in ChromaDB.
+        """Extract a PDF with PyMuPDF, chunk it along headings and paragraphs, and store it in ChromaDB.
 
-        Chunks are tagged with user_id (when given) so retrieval can be scoped per user, and ids are
-        derived from the file's content hash so re-uploading the same PDF replaces rather than duplicates.
+        chunk_size is the maximum characters per chunk; chunk_overlap is kept for API compatibility (chunks
+        carry their section heading instead of overlapping). Chunks are tagged with user_id so retrieval can
+        be scoped per user, and ids derive from the file's content hash so re-uploading replaces, not duplicates.
         """
         if self.collection is None:
             self.initialize()
@@ -126,27 +130,23 @@ class DocumentRAGPipeline:
             pdf_doc = pymupdf.open(file_path)
             total_pages = len(pdf_doc)
 
-            for page_idx in range(total_pages):
-                page = pdf_doc[page_idx]
-                page_num = page_idx + 1
-                page_text = page.get_text() or ""
-                page_text = page_text.strip()
-                if not page_text:
-                    continue
-
-                page_chunks = chunk_text(page_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-                for chunk_idx, chunk in enumerate(page_chunks):
-                    metadata: dict[str, Any] = {
-                        "document_name": doc_name,
-                        "document_id": document_id,
-                        "page_number": page_num,
-                        "chunk_index": chunk_idx,
-                    }
-                    if user_id:
-                        metadata["user_id"] = user_id
-                    documents_to_add.append(chunk)
-                    metadatas_to_add.append(metadata)
-                    ids_to_add.append(f"{id_prefix}_p{page_num}_c{chunk_idx}")
+            uploaded_at = datetime.now(UTC).isoformat()
+            for chunk_idx, chunk in enumerate(structure_chunks(extract_blocks(pdf_doc), max_chars=chunk_size)):
+                metadata: dict[str, Any] = {
+                    "document_name": doc_name,
+                    "document_id": document_id,
+                    "page_number": chunk.page,
+                    "chunk_index": chunk_idx,
+                    "total_pages": total_pages,
+                    "uploaded_at": uploaded_at,
+                }
+                if chunk.heading:
+                    metadata["section"] = chunk.heading
+                if user_id:
+                    metadata["user_id"] = user_id
+                documents_to_add.append(chunk_document_text(chunk))
+                metadatas_to_add.append(metadata)
+                ids_to_add.append(f"{id_prefix}_c{chunk_idx}")
 
             pdf_doc.close()
 
@@ -186,9 +186,10 @@ class DocumentRAGPipeline:
         if total == 0:
             return []
 
+        # Over-fetch candidates, then re-rank with keyword coverage and drop unrelated passages
         results = self.collection.query(
             query_texts=[query],
-            n_results=min(limit, total),
+            n_results=min(max(limit * 4, 12), total),
             where=self._where(user_id, document_names),
         )
 
@@ -206,8 +207,38 @@ class DocumentRAGPipeline:
                     "page_number": meta.get("page_number", 1),
                     "chunk_id": mid,
                     "distance": dist,
+                    "section": meta.get("section"),
                 })
-        return chunks
+        # When the user attached specific files, "summarize this" must still return their passages
+        return rerank(query, chunks, limit, gate=not document_names)
+
+    def list_documents(self, user_id: str) -> list[dict[str, Any]]:
+        """The user's documents with page and passage counts, newest first."""
+        if self.collection is None:
+            self.initialize()
+        rows = self.collection.get(where={"user_id": user_id}, include=["metadatas"])["metadatas"] or []
+        docs: dict[str, dict[str, Any]] = {}
+        for meta in rows:
+            doc = docs.setdefault(meta.get("document_id", ""), {
+                "document_id": meta.get("document_id", ""),
+                "document_name": meta.get("document_name", "Document"),
+                "pages": meta.get("total_pages") or 0,
+                "chunks": 0,
+                "uploaded_at": meta.get("uploaded_at"),
+            })
+            doc["chunks"] += 1
+            doc["pages"] = max(doc["pages"], meta.get("total_pages") or meta.get("page_number") or 0)
+        return sorted(docs.values(), key=lambda d: d.get("uploaded_at") or "", reverse=True)
+
+    def delete_document(self, user_id: str, document_id: str) -> int:
+        """Delete one of the user's documents. Returns the number of passages removed (0 if not found)."""
+        if self.collection is None:
+            self.initialize()
+        where = {"$and": [{"user_id": user_id}, {"document_id": document_id}]}
+        ids = self.collection.get(where=where, include=[])["ids"]
+        if ids:
+            self.collection.delete(ids=ids)
+        return len(ids)
 
     def format_context(self, chunks: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
         """Number retrieved chunks for the LLM and return matching citation sources.
@@ -225,7 +256,10 @@ class DocumentRAGPipeline:
             page_num = chunk.get("page_number", 1)
             content = chunk.get("content", "")
             context_lines.append(f"[{n}] {doc_name}, page {page_num}\n{content}")
-            sources.append({"n": n, "kind": "document", "document": doc_name, "page": page_num, "excerpt": content})
+            source = {"n": n, "kind": "document", "document": doc_name, "page": page_num, "excerpt": content}
+            if chunk.get("section"):
+                source["section"] = chunk["section"]
+            sources.append(source)
 
         return "\n\n".join(context_lines), sources
 

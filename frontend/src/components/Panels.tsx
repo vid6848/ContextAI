@@ -1,5 +1,5 @@
-import { Check, Trash2 } from "lucide-react"
-import { useCallback, useEffect, useState } from "react"
+import { Check, FileText, LoaderCircle, Trash2, Upload } from "lucide-react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router"
 import { toast } from "sonner"
 
@@ -8,18 +8,116 @@ import { ShortcutsDialog } from "@/components/ShortcutsDialog"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { api } from "@/lib/api"
-import type { Reminder } from "@/lib/types"
+import { api, uploadWithProgress } from "@/lib/api"
+import type { DocumentInfo, Reminder } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { useChat } from "@/store/chat"
 
 export function Panels({ open, onClose }: { open: Panel | null; onClose: () => void }) {
   return (
     <>
+      <DocumentsDialog open={open === "documents"} onClose={onClose} />
       <RemindersDialog open={open === "reminders"} onClose={onClose} />
       <ClearMemoryDialog open={open === "memory"} onClose={onClose} />
       <ShortcutsDialog open={open === "shortcuts"} onClose={onClose} />
     </>
+  )
+}
+
+function formatDate(iso?: string | null) {
+  if (!iso) return ""
+  return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })
+}
+
+function DocumentsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [docs, setDocs] = useState<DocumentInfo[] | null>(null)
+  const [progress, setProgress] = useState<number | null>(null)
+  const input = useRef<HTMLInputElement>(null)
+
+  const refresh = useCallback(() => api.listDocuments().then(setDocs).catch(() => setDocs([])), [])
+  useEffect(() => {
+    if (open) refresh()
+  }, [open, refresh])
+
+  const upload = async (file: File) => {
+    setProgress(0)
+    try {
+      const res = await uploadWithProgress(file, setProgress)
+      toast.success(`Added ${res.document_name}`)
+      refresh()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed.")
+    } finally {
+      setProgress(null)
+      if (input.current) input.current.value = ""
+    }
+  }
+
+  const remove = async (doc: DocumentInfo) => {
+    try {
+      await api.deleteDocument(doc.document_id)
+      toast(`Deleted ${doc.document_name}`)
+      refresh()
+    } catch {
+      toast.error("Couldn't delete the document.")
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Your documents</DialogTitle>
+          <DialogDescription>
+            ContextAI searches these when you ask about your files. Only you can see them.
+          </DialogDescription>
+        </DialogHeader>
+        <ul className="max-h-80 divide-y overflow-y-auto">
+          {docs === null && <li className="py-3 text-sm text-muted-foreground">Loading…</li>}
+          {docs?.length === 0 && (
+            <li className="py-3 text-sm text-muted-foreground">
+              No documents yet. Add a PDF here, or drop one into any chat.
+            </li>
+          )}
+          {docs?.map((d) => (
+            <li key={d.document_id} className="flex items-center gap-3 py-2.5">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-step-docs/12 text-step-docs">
+                <FileText className="size-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{d.document_name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {d.pages} {d.pages === 1 ? "page" : "pages"}, {d.chunks} passages
+                  {d.uploaded_at ? `, added ${formatDate(d.uploaded_at)}` : ""}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={`Delete ${d.document_name}`}
+                onClick={() => remove(d)}
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            </li>
+          ))}
+        </ul>
+        <input
+          ref={input}
+          type="file"
+          accept="application/pdf,.pdf"
+          hidden
+          onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
+        />
+        <DialogFooter>
+          <Button onClick={() => input.current?.click()} disabled={progress !== null}>
+            {progress !== null ? <LoaderCircle className="animate-spin" /> : <Upload />}
+            {progress === null ? "Add a PDF" : progress < 1 ? `Uploading ${Math.round(progress * 100)}%` : "Reading the PDF…"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

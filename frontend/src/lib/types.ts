@@ -18,6 +18,8 @@ export interface Source {
   title?: string
   url?: string
   excerpt?: string
+  /** Heading of the document section the passage sits under. */
+  section?: string
 }
 
 export interface WeatherOutput {
@@ -74,6 +76,14 @@ export interface Conversation {
   title: string
   created_at: string
   updated_at: string
+}
+
+export interface DocumentInfo {
+  document_id: string
+  document_name: string
+  pages: number
+  chunks: number
+  uploaded_at?: string | null
 }
 
 export interface Reminder {

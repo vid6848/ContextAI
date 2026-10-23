@@ -103,7 +103,10 @@ export function SourcesPanel() {
                         <FileText className="size-3.5 shrink-0 text-muted-foreground" />
                         <span className="truncate">{s.document}</span>
                       </span>
-                      <span className="text-xs text-muted-foreground">Page {s.page}</span>
+                      <span className="text-xs text-muted-foreground">
+                        Page {s.page}
+                        {s.section ? `, ${s.section}` : ""}
+                      </span>
                     </div>
                   )}
                 </div>

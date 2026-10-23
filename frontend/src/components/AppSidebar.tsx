@@ -1,5 +1,6 @@
 import {
   Bell,
+  FileText,
   Info,
   Keyboard,
   Monitor,
@@ -37,7 +38,7 @@ import type { Conversation } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { useChat } from "@/store/chat"
 
-export type Panel = "reminders" | "memory" | "shortcuts"
+export type Panel = "documents" | "reminders" | "memory" | "shortcuts"
 
 interface AppSidebarProps {
   onNavigate?: () => void
@@ -227,6 +228,9 @@ function AccountMenu({ onOpenPanel }: { onOpenPanel: (panel: Panel) => void }) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="start" className="w-60">
+        <DropdownMenuItem onSelect={() => onOpenPanel("documents")}>
+          <FileText /> Your documents
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => onOpenPanel("reminders")}>
           <Bell /> Reminders
         </DropdownMenuItem>

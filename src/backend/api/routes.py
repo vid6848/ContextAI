@@ -455,12 +455,21 @@ async def upload_document(
 
 @router.get("/documents")
 def get_documents_status(user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
-    """Retrieve the user's document index statistics."""
+    """List the user's documents and the total number of indexed passages."""
     pipeline = get_default_rag_pipeline()
     return {
         "success": True,
         "total_chunks": pipeline.count(user_id),
+        "documents": pipeline.list_documents(user_id),
     }
+
+
+@router.delete("/documents/{document_id}")
+def delete_document(document_id: str, user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
+    """Delete one of the user's documents and all of its passages."""
+    if not get_default_rag_pipeline().delete_document(user_id, document_id):
+        raise HTTPException(status_code=404, detail="Document not found.")
+    return {"success": True}
 
 
 # ============================================================================
