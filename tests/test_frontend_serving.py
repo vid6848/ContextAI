@@ -59,3 +59,11 @@ def test_missing_build_returns_helpful_message(tmp_path):
     resp = client.get("/")
     assert resp.status_code == 503
     assert "npm run build" in resp.json()["detail"]
+
+
+def test_service_worker_is_served_uncached_as_javascript(tmp_path):
+    dist = _build(tmp_path)
+    (dist / "sw.js").write_text("self.addEventListener('push', () => {})")
+    resp = _client(dist).get("/sw.js")
+    assert resp.headers["cache-control"] == "no-cache"
+    assert "javascript" in resp.headers["content-type"]

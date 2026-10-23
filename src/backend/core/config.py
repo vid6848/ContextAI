@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     # first-person messages verbatim (the original behaviour, kept for offline use and tests)
     memory_mode: Literal["llm", "heuristic"] = "llm"
 
+    # Web Push for reminders. Keys are generated into the data dir when empty; set them in production
+    # so browser subscriptions survive redeploys. vapid_contact must be a mailto: or https: URL.
+    push_enabled: bool = True
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_contact: str = "mailto:admin@contextai.local"
+
     # Abuse protection (per client IP, per minute) and upload size cap
     rate_limit_chat_per_minute: int = 20
     rate_limit_upload_per_minute: int = 5

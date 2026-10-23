@@ -22,8 +22,15 @@ def _warm_up() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    from src.backend.api.routes import get_push_service
+    from src.backend.core.config import settings
+    from src.backend.reminders.push import start_push_loop
+
     threading.Thread(target=_warm_up, name="warm-up", daemon=True).start()
+    stop_push = start_push_loop(get_push_service()) if settings.push_enabled else None
     yield
+    if stop_push:
+        stop_push.set()
 
 
 app = FastAPI(
@@ -66,7 +73,9 @@ def mount_frontend(application: FastAPI, dist: Path) -> None:
             raise HTTPException(status_code=404, detail="Not Found")
         candidate = (root / path).resolve()
         if path and candidate.is_file() and candidate.is_relative_to(root):
-            return FileResponse(candidate)
+            # The service worker must never be served stale, or fixes to it would never reach browsers
+            headers = {"Cache-Control": "no-cache"} if path == "sw.js" else None
+            return FileResponse(candidate, headers=headers)
         return FileResponse(root / "index.html", headers={"Cache-Control": "no-cache"})
 
 

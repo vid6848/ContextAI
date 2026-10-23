@@ -26,6 +26,7 @@ from src.backend.core.rate_limit import rate_limit
 from src.backend.llm.client import LLMServiceUnavailableError
 from src.backend.memory.extractor import needs_llm_title, post_turn
 from src.backend.memory.sql_db import DEFAULT_CONVERSATION_TITLE
+from src.backend.reminders.push import PushService
 from src.backend.reminders.reminder_manager import ReminderManager
 from src.backend.reminders.timeparse import parse_when
 
@@ -563,6 +564,50 @@ def get_reminders(
     mgr = get_reminder_manager()
     reminders = mgr.get_reminders(user_id=user_id, status=status)
     return {"success": True, "reminders": reminders}
+
+
+_push_service: PushService | None = None
+
+
+def get_push_service() -> PushService:
+    global _push_service
+    if _push_service is None:
+        _push_service = PushService(reminders=get_reminder_manager())
+    return _push_service
+
+
+class PushSubscriptionRequest(BaseModel):
+    """A browser PushSubscription, as returned by subscription.toJSON()."""
+
+    endpoint: str = Field(..., min_length=10, max_length=2000)
+    keys: dict[str, str]
+
+
+@router.get("/push/public-key")
+def push_public_key():
+    """The VAPID public key the browser needs to subscribe."""
+    if not settings.push_enabled:
+        raise HTTPException(status_code=404, detail="Push notifications are disabled.")
+    return {"public_key": get_push_service().keys.public_key}
+
+
+@router.post("/push/subscribe", status_code=201)
+def push_subscribe(
+    request: PushSubscriptionRequest, user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)
+):
+    """Register this browser to receive reminder notifications."""
+    try:
+        get_push_service().subscribe(user_id, request.model_dump())
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
+    return {"success": True}
+
+
+@router.delete("/push/subscribe")
+def push_unsubscribe(endpoint: str = Query(..., max_length=2000)):
+    """Stop sending notifications to this browser."""
+    get_push_service().unsubscribe(endpoint)
+    return {"success": True}
 
 
 @router.get("/reminders/parse")

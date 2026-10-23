@@ -7,6 +7,7 @@ import { RouterProvider } from "react-router/dom"
 import { AppLayout } from "@/App"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { registerServiceWorker } from "@/lib/push"
 import { ChatPage } from "@/pages/ChatPage"
 import { MemoryPage } from "@/pages/MemoryPage"
 import { NotFoundPage } from "@/pages/NotFoundPage"
@@ -47,3 +48,5 @@ createRoot(document.getElementById("root")!).render(
     </ThemeProvider>
   </StrictMode>,
 )
+
+registerServiceWorker()
