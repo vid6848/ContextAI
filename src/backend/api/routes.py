@@ -13,6 +13,7 @@ from src.backend.agent.graph import (
     get_default_sql_manager,
 )
 from src.backend.llm.client import LLMServiceUnavailableError
+from src.backend.memory.sql_db import DEFAULT_CONVERSATION_TITLE
 from src.backend.reminders.reminder_manager import ReminderManager
 
 router = APIRouter()
@@ -47,11 +48,15 @@ class ChatRequest(BaseModel):
 
     message: str = Field(..., min_length=1, description="The user query or message")
     user_id: str = Field(default="default_user", description="Identifier for the user")
+    conversation_id: str | None = Field(
+        default=None, description="Existing conversation to continue; a new one is created when omitted"
+    )
 
 
 class ChatResponse(BaseModel):
     """Schema for agent chat responses with optional agent execution details."""
 
+    conversation_id: str
     message: str
     intent: str
     confidence: float
@@ -66,6 +71,19 @@ class ClearMemoryRequest(BaseModel):
     user_id: str = Field(default="default_user", description="Identifier for the user")
 
 
+class ConversationCreateRequest(BaseModel):
+    """Schema for creating an empty conversation."""
+
+    user_id: str = Field(default="default_user", description="Identifier for the user")
+    title: str | None = Field(default=None, max_length=200)
+
+
+class ConversationRenameRequest(BaseModel):
+    """Schema for renaming a conversation."""
+
+    title: str = Field(..., min_length=1, max_length=200)
+
+
 class ReminderCreateRequest(BaseModel):
     """Schema for creating a new reminder."""
 
@@ -75,15 +93,86 @@ class ReminderCreateRequest(BaseModel):
 
 
 # ============================================================================
+# Conversation Endpoints
+# ============================================================================
+
+def _title_from_message(message: str) -> str:
+    """Derive a short provisional title from the first user message."""
+    clean = " ".join(message.split())
+    return clean if len(clean) <= 60 else clean[:57].rstrip() + "…"
+
+
+def resolve_conversation(user_id: str, conversation_id: str | None, message: str) -> dict[str, Any]:
+    """Return the requested conversation, or create one titled after the message."""
+    sql_mgr = get_default_sql_manager()
+    if conversation_id is None:
+        return sql_mgr.create_conversation(user_id=user_id, title=_title_from_message(message))
+    conversation = sql_mgr.get_conversation(conversation_id, user_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    if conversation["title"] == DEFAULT_CONVERSATION_TITLE:
+        sql_mgr.rename_conversation(conversation_id, user_id, _title_from_message(message))
+    return conversation
+
+
+@router.get("/conversations")
+def list_conversations(user_id: str = Query(default="default_user")):
+    """List a user's conversations, most recently active first."""
+    return {"conversations": get_default_sql_manager().list_conversations(user_id)}
+
+
+@router.post("/conversations", status_code=201)
+def create_conversation(request: ConversationCreateRequest):
+    """Create an empty conversation."""
+    return get_default_sql_manager().create_conversation(user_id=request.user_id, title=request.title)
+
+
+@router.get("/conversations/{conversation_id}/messages")
+def get_conversation_messages(conversation_id: str, user_id: str = Query(default="default_user")):
+    """Return the full message history of a conversation."""
+    sql_mgr = get_default_sql_manager()
+    conversation = sql_mgr.get_conversation(conversation_id, user_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    return {
+        "conversation": conversation,
+        "messages": sql_mgr.get_conversation_messages(conversation_id, user_id),
+    }
+
+
+@router.patch("/conversations/{conversation_id}")
+def rename_conversation(
+    conversation_id: str,
+    request: ConversationRenameRequest,
+    user_id: str = Query(default="default_user"),
+):
+    """Rename a conversation."""
+    if not get_default_sql_manager().rename_conversation(conversation_id, user_id, request.title):
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    return {"success": True}
+
+
+@router.delete("/conversations/{conversation_id}")
+def delete_conversation(conversation_id: str, user_id: str = Query(default="default_user")):
+    """Delete a conversation and all of its messages."""
+    if not get_default_sql_manager().delete_conversation(conversation_id, user_id):
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    return {"success": True}
+
+
+# ============================================================================
 # Chat Endpoints
 # ============================================================================
 
 @router.post("/chat", response_model=ChatResponse)
 def chat_endpoint(request: ChatRequest):
     """Endpoint for interacting with the ContextAI agent via LangGraph."""
+    conversation = resolve_conversation(request.user_id, request.conversation_id, request.message)
     agent = get_agent()
     try:
-        result = agent.invoke({"message": request.message, "user_id": request.user_id})
+        result = agent.invoke(
+            {"message": request.message, "user_id": request.user_id, "conversation_id": conversation["id"]}
+        )
     except ValueError as err:
         # Configuration errors (e.g. missing API key) — return helpful message, not raw 500
         raise HTTPException(status_code=503, detail=str(err)) from err
@@ -104,6 +193,7 @@ def chat_endpoint(request: ChatRequest):
         raise HTTPException(status_code=502, detail=f"Agent execution error: {error_msg}") from err
 
     return ChatResponse(
+        conversation_id=conversation["id"],
         message=result.get("message", request.message),
         intent=result.get("intent", "GENERAL"),
         confidence=float(result.get("confidence", 0.0)),
