@@ -11,6 +11,8 @@ class AgentState(TypedDict, total=False):
     message: str
     user_id: str
     conversation_id: str
+    # Names of PDFs attached to this message; routes to document search over just those files
+    attachments: list[str]
     intent: str
     current_intent: str
     confidence: float

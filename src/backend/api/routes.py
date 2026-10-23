@@ -6,7 +6,7 @@ import logging
 import os
 import tempfile
 import threading
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
@@ -68,6 +68,9 @@ class ChatRequest(BaseModel):
     user_id: str = Field(default="default_user", pattern=USER_ID_PATTERN, description="Identifier for the user")
     conversation_id: str | None = Field(
         default=None, description="Existing conversation to continue; a new one is created when omitted"
+    )
+    attachments: list[Annotated[str, Field(min_length=1, max_length=255)]] = Field(
+        default_factory=list, max_length=5, description="Names of uploaded PDFs this message is about"
     )
     replace_from_message_id: int | None = Field(
         default=None,
@@ -155,6 +158,15 @@ def generate_title(user_message: str, answer: str) -> str | None:
         return None
     title = (raw or "").strip().splitlines()[0].strip().strip("\"'*#").rstrip(".").strip() if raw else ""
     return title[:60] if 2 <= len(title) else None
+
+
+def _agent_input(request: ChatRequest, conversation: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "message": request.message,
+        "user_id": request.user_id,
+        "conversation_id": conversation["id"],
+        "attachments": request.attachments,
+    }
 
 
 def resolve_conversation(request: ChatRequest) -> dict[str, Any]:
@@ -257,7 +269,7 @@ def chat_endpoint(request: ChatRequest):
     agent = get_agent()
     try:
         result = agent.invoke(
-            {"message": request.message, "user_id": request.user_id, "conversation_id": conversation["id"]}
+            _agent_input(request, conversation)
         )
     except ValueError as err:
         # Configuration errors (e.g. missing API key) — return helpful message, not raw 500
@@ -329,7 +341,7 @@ async def chat_stream_endpoint(request: ChatRequest):
         final: dict[str, Any] = {}
         try:
             for mode, chunk in agent.stream(
-                {"message": request.message, "user_id": request.user_id, "conversation_id": conversation["id"]},
+                _agent_input(request, conversation),
                 stream_mode=["custom", "values"],
                 config={"configurable": {"stream": True, "cancel_event": cancel_event}},
             ):

@@ -1,5 +1,5 @@
-import { Check, Trash2, Upload } from "lucide-react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { Check, Trash2 } from "lucide-react"
+import { useCallback, useEffect, useState } from "react"
 import { useNavigate } from "react-router"
 import { toast } from "sonner"
 
@@ -15,63 +15,9 @@ import { useChat } from "@/store/chat"
 export function Panels({ open, onClose }: { open: Panel | null; onClose: () => void }) {
   return (
     <>
-      <DocumentsDialog open={open === "documents"} onClose={onClose} />
       <RemindersDialog open={open === "reminders"} onClose={onClose} />
       <ClearMemoryDialog open={open === "memory"} onClose={onClose} />
     </>
-  )
-}
-
-function DocumentsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [chunks, setChunks] = useState<number | null>(null)
-  const [uploading, setUploading] = useState(false)
-  const input = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    if (open) api.documentStats().then((r) => setChunks(r.total_chunks)).catch(() => setChunks(null))
-  }, [open])
-
-  const upload = async (file: File) => {
-    setUploading(true)
-    try {
-      const res = await api.uploadDocument(file)
-      toast.success(`Added ${res.document_name}`, { description: `${res.total_pages} pages, ${res.total_chunks} passages` })
-      setChunks((await api.documentStats()).total_chunks)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Upload failed.")
-    } finally {
-      setUploading(false)
-      if (input.current) input.current.value = ""
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Documents</DialogTitle>
-          <DialogDescription>
-            Add PDFs and ask about them in any chat. Answers cite the page they came from. Only you can see your
-            documents.
-          </DialogDescription>
-        </DialogHeader>
-        <p className="text-sm text-muted-foreground">
-          {chunks === null ? "Loading…" : chunks === 0 ? "No documents yet." : `${chunks} passages indexed.`}
-        </p>
-        <input
-          ref={input}
-          type="file"
-          accept="application/pdf"
-          className="hidden"
-          onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
-        />
-        <DialogFooter>
-          <Button onClick={() => input.current?.click()} disabled={uploading}>
-            <Upload /> {uploading ? "Adding…" : "Add a PDF"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   )
 }
 
