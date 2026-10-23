@@ -144,6 +144,23 @@ TOOL_DISPLAY = {
     "web_search": ("Searching the web", "Tavily web search"),
 }
 MAX_STEP_DETAIL_CHARS = 4000
+# Tools whose structured result the UI renders as a card under the answer
+CARD_TOOLS = {"weather", "crypto"}
+CITATION_RULES = (
+    "Cite each claim with the source number in square brackets right after it, like [1] or [2][3]. "
+    "Don't write document names, page numbers or URLs in the text; the app shows them next to the citations. "
+    "If the sources don't contain the answer, say so instead of guessing."
+)
+
+
+def web_sources(result: dict[str, Any]) -> list[dict[str, Any]]:
+    """Turn web search results into numbered citation sources."""
+    return [
+        {"n": n, "kind": "web", "title": r.get("title") or r.get("url", ""), "url": r.get("url", ""),
+         "excerpt": (r.get("content") or "")[:600]}
+        for n, r in enumerate(result.get("results") or [], start=1)
+        if r.get("url")
+    ]
 
 
 def _compact(value: Any) -> Any:
@@ -158,7 +175,8 @@ def _compact(value: Any) -> Any:
 def agent_step(step_id: str, label: str) -> Iterator[dict[str, Any]]:
     """Time a unit of agent work and stream its start/end as `step` events.
 
-    The body may update step["label"] and step["detail"]. Under graph.invoke() the stream writer is a
+    The body may update step["label"] and step["detail"], and set step["failed"] = True to report a handled
+    failure (e.g. a tool returning an error) without raising. Under graph.invoke() the stream writer is a
     no-op, so the same nodes serve both the streaming and non-streaming endpoints.
     """
     writer = get_stream_writer()
@@ -167,13 +185,21 @@ def agent_step(step_id: str, label: str) -> Iterator[dict[str, Any]]:
     started = time.perf_counter()
     try:
         yield step
-        step["status"] = "done"
+        step["status"] = "error" if step.pop("failed", False) else "done"
     except Exception:
         step["status"] = "error"
         raise
     finally:
         step["duration_ms"] = round((time.perf_counter() - started) * 1000)
         writer({"type": "step", **step})
+
+
+def tool_card(state: AgentState) -> dict[str, Any] | None:
+    """Structured tool result for the UI card, when the tool has one and succeeded."""
+    result = state.get("tool_result") or {}
+    if state.get("tool_name") in CARD_TOOLS and result.get("success"):
+        return result
+    return None
 
 
 def _extract_message(state: AgentState) -> str:
@@ -270,14 +296,22 @@ def build_agent_graph(
         """Classify user intent using TF-IDF + Logistic Regression."""
         message = _extract_message(state)
         active_classifier = classifier or get_default_classifier()
+        attachments = state.get("attachments") or []
         with agent_step("intent", "Classifying intent") as step:
-            pred = active_classifier.predict(message)
-            step["label"] = f"Classified intent: {pred.intent} ({pred.confidence:.0%})"
-            step["detail"] = {"intent": pred.intent, "confidence": round(pred.confidence, 3)}
+            if attachments:
+                # The user pointed at specific files; no need to guess
+                intent, confidence = "DOCUMENT", 1.0
+                step["label"] = f"Routed to your attached {'file' if len(attachments) == 1 else 'files'}"
+                step["detail"] = {"intent": intent, "attachments": attachments}
+            else:
+                pred = active_classifier.predict(message)
+                intent, confidence = pred.intent, pred.confidence
+                step["label"] = f"Classified intent: {intent} ({confidence:.0%})"
+                step["detail"] = {"intent": intent, "confidence": round(confidence, 3)}
         return {
-            "intent": pred.intent,
-            "current_intent": pred.intent,
-            "confidence": pred.confidence,
+            "intent": intent,
+            "current_intent": intent,
+            "confidence": confidence,
             "steps": [step],
         }
 
@@ -304,6 +338,7 @@ def build_agent_graph(
             res = tool.run(msg)
             ok = bool(res.get("success", True))
             step["label"] = f"Used {display}" if ok else f"{display} failed: {res.get('error', 'unknown error')}"
+            step["failed"] = not ok
             step["detail"] = {"input": msg, "output": _compact(res)}
         return {"tool_name": name, "tool_result": res, "steps": [step]}
 
@@ -320,15 +355,22 @@ def build_agent_graph(
         return run_tool("crypto", crypto_tool or get_default_crypto_tool(), _extract_message(state))
 
     def web_search_node(state: AgentState) -> dict:
-        """Execute web search tool."""
-        return run_tool("web_search", tavily_tool or get_default_tavily_tool(), _extract_message(state))
+        """Execute web search tool; its results become numbered citation sources."""
+        update = run_tool("web_search", tavily_tool or get_default_tavily_tool(), _extract_message(state))
+        if update["tool_result"].get("success"):
+            update["rag_sources"] = web_sources(update["tool_result"])
+        return update
 
     def document_rag_node(state: AgentState) -> dict:
         """Retrieve relevant PDF document chunks from ChromaDB."""
         msg = _extract_message(state)
         pipeline = rag_pipeline or get_default_rag_pipeline()
         with agent_step("tool:document_rag", "Searching your documents") as step:
-            chunks = pipeline.retrieve(msg, limit=4, user_id=state.get("user_id") or "default_user")
+            attachments = state.get("attachments") or None
+            chunks = pipeline.retrieve(
+                msg, limit=6 if attachments else 4, user_id=state.get("user_id") or "default_user",
+                document_names=attachments,
+            )
             _, sources = pipeline.format_context(chunks)
             step["label"] = (
                 f"Found {len(chunks)} relevant {'passage' if len(chunks) == 1 else 'passages'}"
@@ -378,15 +420,22 @@ def build_agent_graph(
             pipeline = rag_pipeline or get_default_rag_pipeline()
             rag_text, _ = pipeline.format_context(state["document_chunks"])
             context_sections.append(
-                f"Retrieved Document Content:\n{rag_text}\n"
-                "Answer the user's question using the retrieved document content above. "
-                "Include document name and page number citations in your answer."
+                f"Numbered passages from the user's documents:\n{rag_text}\n"
+                f"Answer the user's question from these passages. {CITATION_RULES}"
             )
 
         # 2. Tool Execution Result
         tool_name = state.get("tool_name")
         tool_res = state.get("tool_result")
-        if tool_name and tool_res:
+        if tool_name == "web_search" and state.get("rag_sources"):
+            results_text = "\n\n".join(
+                f"[{s['n']}] {s['title']} ({s['url']})\n{s['excerpt']}" for s in state["rag_sources"]
+            )
+            context_sections.append(
+                f"Numbered web search results:\n{results_text}\n"
+                f"Answer the user's question from these results. {CITATION_RULES}"
+            )
+        elif tool_name and tool_res and tool_name != "document_rag":
             context_sections.append(
                 f"Tool Execution Result ({tool_name}):\n{tool_res}\n"
                 "Use the tool result above to provide an accurate, helpful, and natural-language answer to the user."
@@ -451,8 +500,13 @@ def build_agent_graph(
         conversation_id = state.get("conversation_id")
         saved: dict[str, int] = {}
         if message:
+            attachments = state.get("attachments")
             saved["user_message_id"] = active_sql.save_message(
-                user_id=user_id, role="user", message=message, conversation_id=conversation_id
+                user_id=user_id,
+                role="user",
+                message=message,
+                conversation_id=conversation_id,
+                metadata={"attachments": attachments} if attachments else None,
             )
         if response:
             saved["assistant_message_id"] = active_sql.save_message(
@@ -465,6 +519,7 @@ def build_agent_graph(
                     "confidence": state.get("confidence"),
                     "tool_used": state.get("tool_name"),
                     "sources": state.get("rag_sources"),
+                    "tool_output": tool_card(state),
                     "steps": state.get("steps") or [],
                     "stopped": bool(state.get("stopped")),
                 },

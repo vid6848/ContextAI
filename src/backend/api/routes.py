@@ -6,7 +6,7 @@ import logging
 import os
 import tempfile
 import threading
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
@@ -14,9 +14,11 @@ from pydantic import BaseModel, Field
 
 from src.backend.agent.graph import (
     get_agent_app,
+    get_default_llm_client,
     get_default_rag_pipeline,
     get_default_sql_manager,
     get_default_vector_store,
+    tool_card,
 )
 from src.backend.core.config import settings
 from src.backend.core.rate_limit import rate_limit
@@ -68,6 +70,9 @@ class ChatRequest(BaseModel):
     conversation_id: str | None = Field(
         default=None, description="Existing conversation to continue; a new one is created when omitted"
     )
+    attachments: list[Annotated[str, Field(min_length=1, max_length=255)]] = Field(
+        default_factory=list, max_length=5, description="Names of uploaded PDFs this message is about"
+    )
     replace_from_message_id: int | None = Field(
         default=None,
         description=(
@@ -110,6 +115,12 @@ class ConversationRenameRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
 
 
+class FeedbackRequest(BaseModel):
+    """Thumbs up/down on an assistant answer; null clears it."""
+
+    rating: Literal["up", "down"] | None = None
+
+
 class ReminderCreateRequest(BaseModel):
     """Schema for creating a new reminder."""
 
@@ -126,6 +137,37 @@ def _title_from_message(message: str) -> str:
     """Derive a short provisional title from the first user message."""
     clean = " ".join(message.split())
     return clean if len(clean) <= 60 else clean[:57].rstrip() + "…"
+
+
+TITLE_PROMPT = (
+    "Write a short title (2 to 6 words) for a chat that starts with the exchange below. "
+    "Use sentence case, no quotes, no trailing punctuation. Reply with the title only."
+)
+
+
+def generate_title(user_message: str, answer: str) -> str | None:
+    """Ask the LLM for a concise chat title; None if it fails or returns something unusable."""
+    try:
+        raw = get_default_llm_client().generate_response(
+            message=[
+                {"role": "system", "content": TITLE_PROMPT},
+                {"role": "user", "content": f"User: {user_message[:1000]}\n\nAssistant: {answer[:1000]}"},
+            ]
+        )
+    except Exception:
+        logger.warning("Title generation failed", exc_info=True)
+        return None
+    title = (raw or "").strip().splitlines()[0].strip().strip("\"'*#").rstrip(".").strip() if raw else ""
+    return title[:60] if 2 <= len(title) else None
+
+
+def _agent_input(request: ChatRequest, conversation: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "message": request.message,
+        "user_id": request.user_id,
+        "conversation_id": conversation["id"],
+        "attachments": request.attachments,
+    }
 
 
 def resolve_conversation(request: ChatRequest) -> dict[str, Any]:
@@ -181,6 +223,22 @@ def get_conversation_messages(
     }
 
 
+@router.put("/conversations/{conversation_id}/messages/{message_id}/feedback")
+def set_message_feedback(
+    conversation_id: str,
+    message_id: int,
+    request: FeedbackRequest,
+    user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN),
+):
+    """Record 👍/👎 feedback on an assistant answer."""
+    sql_mgr = get_default_sql_manager()
+    message = sql_mgr.get_message(message_id, conversation_id, user_id)
+    if message is None or message["role"] != "assistant":
+        raise HTTPException(status_code=404, detail="Message not found.")
+    sql_mgr.update_message_metadata(message_id, conversation_id, user_id, {"feedback": request.rating})
+    return {"success": True, "rating": request.rating}
+
+
 @router.patch("/conversations/{conversation_id}")
 def rename_conversation(
     conversation_id: str,
@@ -212,7 +270,7 @@ def chat_endpoint(request: ChatRequest):
     agent = get_agent()
     try:
         result = agent.invoke(
-            {"message": request.message, "user_id": request.user_id, "conversation_id": conversation["id"]}
+            _agent_input(request, conversation)
         )
     except ValueError as err:
         # Configuration errors (e.g. missing API key) — return helpful message, not raw 500
@@ -267,7 +325,8 @@ async def chat_stream_endpoint(request: ChatRequest):
     """Stream the agent's work as Server-Sent Events.
 
     Events: `meta` (conversation id) → `step` (memory/intent/tool progress) → `token` (response text
-    deltas) → `done` (intent, tool, sources, saved message ids) or `error`. If the client disconnects
+    deltas) → `done` (intent, tool, sources, saved message ids) or `error`; a new chat then gets a
+    `title` event with an LLM-written title. If the client disconnects
     (Stop button), generation is cancelled and the partial answer is saved.
     """
     conversation = resolve_conversation(request)
@@ -283,7 +342,7 @@ async def chat_stream_endpoint(request: ChatRequest):
         final: dict[str, Any] = {}
         try:
             for mode, chunk in agent.stream(
-                {"message": request.message, "user_id": request.user_id, "conversation_id": conversation["id"]},
+                _agent_input(request, conversation),
                 stream_mode=["custom", "values"],
                 config={"configurable": {"stream": True, "cancel_event": cancel_event}},
             ):
@@ -297,10 +356,16 @@ async def chat_stream_endpoint(request: ChatRequest):
                 "confidence": float(final.get("confidence", 0.0)),
                 "tool_used": final.get("tool_name"),
                 "sources": final.get("rag_sources"),
+                "tool_output": tool_card(final),
                 "stopped": bool(final.get("stopped")),
                 "user_message_id": final.get("user_message_id"),
                 "assistant_message_id": final.get("assistant_message_id"),
             })
+            # A brand-new chat gets a proper title once the first answer exists
+            if request.conversation_id is None and final.get("response") and not final.get("stopped"):
+                title = generate_title(request.message, final["response"])
+                if title and get_default_sql_manager().rename_conversation(conversation["id"], request.user_id, title):
+                    publish({"type": "title", "title": title})
         except Exception as err:
             publish({"type": "error", "detail": _client_error_detail(err)})
         finally:

@@ -123,8 +123,13 @@ def test_routing_web_search_tool():
     assert len(result["tool_result"]["results"]) == 1
 
     context = mock_llm.generate_response.call_args.kwargs["context"]
-    assert "Tool Execution Result (web_search):" in context
+    assert "[1] Python 3.13 News (https://python.org)" in context
     assert "Free-threaded CPython" in context
+    assert "square brackets" in context
+    assert result["rag_sources"] == [
+        {"n": 1, "kind": "web", "title": "Python 3.13 News", "url": "https://python.org",
+         "excerpt": "Free-threaded CPython released."}
+    ]
 
 
 def test_routing_document_rag_with_indexed_document(tmp_path):
@@ -161,8 +166,9 @@ def test_routing_document_rag_with_indexed_document(tmp_path):
     assert result["rag_sources"][0]["document"] == "handbook.pdf"
 
     context = mock_llm.generate_response.call_args.kwargs["context"]
-    assert "Retrieved Document Content:" in context
-    assert "[Source: handbook.pdf, Page: 1]" in context
+    assert "Numbered passages from the user's documents:" in context
+    assert "[1] handbook.pdf, page 1" in context
+    assert "Tool Execution Result" not in context  # sources aren't duplicated as a raw tool dump
 
 
 def test_routing_document_rag_empty_no_documents(tmp_path):
