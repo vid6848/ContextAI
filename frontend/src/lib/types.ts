@@ -55,6 +55,8 @@ export interface MessageMeta {
   feedback?: Feedback
   /** PDFs attached to a user message. */
   attachments?: string[]
+  /** Long-term memory changes made because of this exchange. */
+  memory?: MemoryChange[]
 }
 
 export type Feedback = "up" | "down"
@@ -76,6 +78,20 @@ export interface Conversation {
   title: string
   created_at: string
   updated_at: string
+}
+
+export interface MemoryChange {
+  op: "add" | "update" | "delete"
+  id: string
+  fact: string
+}
+
+export interface Memory {
+  id: string
+  fact: string
+  source: "chat" | "manual"
+  created_at?: string | null
+  updated_at?: string | null
 }
 
 export interface DocumentInfo {
@@ -100,6 +116,7 @@ export type StreamEvent =
   | { event: "step"; data: AgentStep }
   | { event: "token"; data: { text: string } }
   | { event: "title"; data: { title: string } }
+  | { event: "memory"; data: { changes: MemoryChange[] } }
   | {
       event: "done"
       data: MessageMeta & { user_message_id?: number; assistant_message_id?: number }

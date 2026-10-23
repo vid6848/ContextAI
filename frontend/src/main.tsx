@@ -8,6 +8,7 @@ import { AppLayout } from "@/App"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { ChatPage } from "@/pages/ChatPage"
+import { MemoryPage } from "@/pages/MemoryPage"
 import { NotFoundPage } from "@/pages/NotFoundPage"
 
 const LandingPage = lazy(() => import("@/pages/LandingPage"))
@@ -21,6 +22,7 @@ const router = createBrowserRouter([
     children: [
       { path: "/chat", element: <ChatPage /> },
       { path: "/c/:id", element: <ChatPage /> },
+      { path: "/memory", element: <MemoryPage /> },
     ],
   },
   {

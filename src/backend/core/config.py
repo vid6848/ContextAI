@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     hybrid_confidence_threshold: float = 0.8
     max_tool_rounds: int = 4
 
+    # Long-term memory: "llm" extracts and reconciles facts after each reply; "heuristic" stores
+    # first-person messages verbatim (the original behaviour, kept for offline use and tests)
+    memory_mode: Literal["llm", "heuristic"] = "llm"
+
     # Abuse protection (per client IP, per minute) and upload size cap
     rate_limit_chat_per_minute: int = 20
     rate_limit_upload_per_minute: int = 5

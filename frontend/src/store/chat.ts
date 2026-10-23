@@ -149,6 +149,9 @@ export const useChat = create<ChatState>((set, get) => {
               patchMessage(ck, reply.key, (m) => ({ ...m, id: assistant_message_id, meta: { ...m.meta, ...meta } }))
               break
             }
+            case "memory":
+              patchMessage(ck, reply.key, (m) => ({ ...m, meta: { ...m.meta, memory: data.changes } }))
+              break
             case "error":
               patchMessage(ck, reply.key, (m) => ({ ...m, error: data.detail }))
               break

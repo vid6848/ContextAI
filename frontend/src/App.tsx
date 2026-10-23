@@ -1,6 +1,6 @@
 import { Menu, PanelLeftOpen, SquarePen } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
-import { Outlet, useNavigate } from "react-router"
+import { Outlet, useLocation, useNavigate } from "react-router"
 
 import { AppSidebar, type Panel } from "@/components/AppSidebar"
 import { BrandBackground } from "@/components/BrandBackground"
@@ -13,7 +13,9 @@ const COLLAPSED_KEY = "contextai_sidebar_collapsed"
 
 export function AppLayout() {
   const loadConversations = useChat((s) => s.loadConversations)
-  const title = useChat((s) => s.conversations.find((c) => c.id === s.activeId)?.title)
+  const chatTitle = useChat((s) => s.conversations.find((c) => c.id === s.activeId)?.title)
+  const { pathname } = useLocation()
+  const title = pathname.startsWith("/c/") ? chatTitle : pathname === "/memory" ? "Memory" : undefined
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [panel, setPanel] = useState<Panel | null>(null)

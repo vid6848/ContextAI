@@ -22,6 +22,8 @@ def isolate_test_storage(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "tavily_api_key", "")
     # Most tests exercise the deterministic classifier path; test_tool_agent.py covers LLM routing
     monkeypatch.setattr(settings, "router_mode", "classifier")
+    # Verbatim first-person memories; test_memory_extraction.py covers the LLM extractor
+    monkeypatch.setattr(settings, "memory_mode", "heuristic")
 
     # Reset singletons so they bind to the temporary test storage
     graph._default_sql_manager = None

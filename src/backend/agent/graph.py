@@ -687,7 +687,8 @@ def build_agent_graph(
                 },
             )
 
-        if message and is_user_specific_memory(message):
+        # In "llm" mode the API layer extracts facts after the reply is sent (see update_long_term_memory)
+        if settings.memory_mode == "heuristic" and message and is_user_specific_memory(message):
             active_vs.add_memory(memory=message, user_id=user_id)
 
         return saved
