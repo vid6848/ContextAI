@@ -8,13 +8,13 @@
 const BACKEND_URL = (window.CONTEXTAI_BACKEND_URL || "").replace(/\/$/, "");
 const API = `${BACKEND_URL}/api/v1`;
 const USER_ID = "default_user";
-const STORAGE_KEY = "contextai_conversations_v1";
 const THEME_STORAGE_KEY = "contextai_accent_theme";
 const SIDEBAR_STORAGE_KEY = "contextai_sidebar_collapsed";
 
 /* ---------------------------------------------------------------- state */
-let conversations = {}; // id -> { id, title, createdAt, messages: [{role, content, details}] }
-let currentId = null;
+let conversations = {}; // id -> { id, title, updated_at, messages: null | [{role, content, details}] }
+let currentId = null; // null = unsaved draft; the server assigns an id on first send
+let draft = { id: null, title: "New conversation", messages: [] };
 let sending = false;
 
 /* ---------------------------------------------------------------- dom */
@@ -36,10 +36,6 @@ const toastEl = $("#toast");
 const isMobile = () => window.matchMedia("(max-width: 860px)").matches;
 
 /* ---------------------------------------------------------------- utils */
-function uid() {
-  return "chat_" + Math.random().toString(16).slice(2, 10);
-}
-
 function escapeHtml(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
@@ -91,34 +87,49 @@ document.querySelectorAll(".theme-option").forEach((btn) => {
 });
 
 /* ------------------------------------------------------------ persistence */
-function saveConversations() {
+const userQuery = () => `user_id=${encodeURIComponent(USER_ID)}`;
+
+async function loadConversations() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ conversations, currentId }));
-  } catch (_) { /* storage full/blocked — non-fatal */ }
+    const resp = await fetch(`${API}/conversations?${userQuery()}`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const next = {};
+    for (const c of data.conversations) {
+      // Keep already-loaded messages so switching back doesn't refetch
+      next[c.id] = { ...c, messages: conversations[c.id]?.messages ?? null };
+    }
+    conversations = next;
+  } catch (_) { /* backend unreachable — sidebar stays empty */ }
 }
 
-function loadConversations() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-    const data = JSON.parse(raw);
-    if (data && data.conversations && Object.keys(data.conversations).length) {
-      conversations = data.conversations;
-      currentId = data.currentId;
-    }
-  } catch (_) { /* corrupted storage — start fresh */ }
+function fromServerMessage(m) {
+  const msg = { role: m.role, content: m.message };
+  if (m.role === "assistant" && m.metadata) msg.details = m.metadata;
+  return msg;
+}
+
+async function openConversation(id) {
+  currentId = id;
+  const chat = conversations[id];
+  if (chat && chat.messages === null) {
+    chat.messages = [];
+    renderAll();
+    try {
+      const resp = await fetch(`${API}/conversations/${id}/messages?${userQuery()}`);
+      if (resp.ok) chat.messages = (await resp.json()).messages.map(fromServerMessage);
+    } catch (_) { toast("Could not load this conversation"); }
+  }
+  renderAll();
 }
 
 function createConversation() {
-  const id = uid();
-  conversations[id] = { id, title: "New conversation", createdAt: Date.now(), messages: [] };
-  currentId = id;
-  saveConversations();
-  return id;
+  currentId = null;
+  draft = { id: null, title: "New conversation", messages: [] };
 }
 
 function currentChat() {
-  return conversations[currentId];
+  return currentId ? conversations[currentId] : draft;
 }
 
 /* ---------------------------------------------------------------- sidebar */
@@ -164,7 +175,7 @@ document.addEventListener("keydown", (e) => {
 function renderConversationList() {
   const q = searchInput.value.trim().toLowerCase();
   const items = Object.values(conversations)
-    .sort((a, b) => b.createdAt - a.createdAt)
+    .sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""))
     .filter((c) => !q || c.title.toLowerCase().includes(q));
 
   convList.innerHTML = "";
@@ -182,9 +193,7 @@ function renderConversationList() {
     titleBtn.textContent = c.title;
     titleBtn.title = c.title;
     titleBtn.addEventListener("click", () => {
-      currentId = c.id;
-      saveConversations();
-      renderAll();
+      openConversation(c.id);
       if (isMobile()) closeSidebar();
     });
 
@@ -204,25 +213,30 @@ function renderConversationList() {
 
     const saveBtn = document.createElement("button");
     saveBtn.textContent = "Save name";
-    saveBtn.addEventListener("click", () => {
+    saveBtn.addEventListener("click", async () => {
       const v = renameInput.value.trim();
-      if (v) {
-        c.title = v;
-        saveConversations();
-        renderAll();
-      }
+      if (!v) return;
+      const resp = await fetch(`${API}/conversations/${c.id}?${userQuery()}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: v }),
+      }).catch(() => null);
+      if (resp && resp.ok) c.title = v;
+      else toast("Could not rename conversation");
+      renderAll();
     });
 
     const delBtn = document.createElement("button");
     delBtn.textContent = "Delete";
     delBtn.className = "danger";
-    delBtn.addEventListener("click", () => {
-      delete conversations[c.id];
-      if (!Object.keys(conversations).length) createConversation();
-      else if (currentId === c.id) {
-        currentId = Object.values(conversations).sort((a, b) => b.createdAt - a.createdAt)[0].id;
+    delBtn.addEventListener("click", async () => {
+      const resp = await fetch(`${API}/conversations/${c.id}?${userQuery()}`, { method: "DELETE" }).catch(() => null);
+      if (!resp || !resp.ok) {
+        toast("Could not delete conversation");
+        return;
       }
-      saveConversations();
+      delete conversations[c.id];
+      if (currentId === c.id) createConversation();
       renderAll();
     });
 
@@ -381,7 +395,7 @@ async function apiChat(message) {
     const resp = await fetch(`${API}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, user_id: USER_ID }),
+      body: JSON.stringify({ message, user_id: USER_ID, conversation_id: currentId }),
     });
     if (resp.ok) return await resp.json();
     let detail = resp.statusText;
@@ -399,11 +413,7 @@ async function sendMessage(text) {
   sendBtn.disabled = true;
 
   const chat = currentChat();
-  if (!chat.messages.length || chat.title === "New conversation") {
-    chat.title = clean.length > 32 ? clean.slice(0, 32) + "…" : clean;
-  }
   chat.messages.push({ role: "user", content: clean });
-  saveConversations();
   renderAll();
 
   // Thinking indicator
@@ -423,6 +433,12 @@ async function sendMessage(text) {
       : "Something went wrong while processing that request. Please try again.";
     chat.messages.push({ role: "assistant", content: userMsg, error: true, errorDetail: data._detail });
   } else if (data) {
+    if (!chat.id) {
+      // First message of a draft: the server created the conversation
+      chat.id = data.conversation_id;
+      conversations[chat.id] = chat;
+      currentId = chat.id;
+    }
     chat.messages.push({
       role: "assistant",
       content: data.response || "I could not generate a response.",
@@ -441,7 +457,7 @@ async function sendMessage(text) {
     });
   }
 
-  saveConversations();
+  await loadConversations();
   sending = false;
   sendBtn.disabled = composerInput.value.trim() === "";
   renderAll();
@@ -751,9 +767,8 @@ function getSuggestedFollowups(query, intent, toolUsed) {
 }
 
 /* ---------------------------------------------------------------- init */
-loadConversations();
-if (!Object.keys(conversations).length) createConversation();
-if (!conversations[currentId]) currentId = Object.keys(conversations)[0];
+createConversation();
+loadConversations().then(renderConversationList);
 
 loadAccentTheme();
 
