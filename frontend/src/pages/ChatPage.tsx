@@ -83,7 +83,7 @@ export function ChatPage() {
           <span className="flex size-12 items-center justify-center rounded-2xl bg-step-docs/10 text-step-docs">
             <FileText className="size-6" />
           </span>
-          <p className="text-[15px] font-medium">Drop PDFs to attach them</p>
+          <p className="text-[0.9375rem] font-medium">Drop PDFs to attach them</p>
           <p className="text-sm text-muted-foreground">Up to 10 MB each. Only you can see them.</p>
         </div>
       )}
@@ -91,7 +91,7 @@ export function ChatPage() {
         {messages.length === 0 ? (
           <EmptyState onPick={(text) => onSend(text)} />
         ) : (
-          <div className="mx-auto w-full max-w-[720px] space-y-8 px-4 pt-6 pb-10">
+          <div className="mx-auto w-full max-w-[var(--content-width)] space-y-8 px-4 pt-6 pb-10">
             {messages.map((m, i) =>
               m.role === "user" ? (
                 <UserMessage key={m.key} message={m} />
@@ -102,7 +102,7 @@ export function ChatPage() {
           </div>
         )}
       </div>
-      <div className="mx-auto w-full max-w-[720px] px-4 pb-3">
+      <div className="mx-auto w-full max-w-[var(--content-width)] px-4 pb-3">
         <ConnectionBanner state={connection} />
         <Composer ref={composer} streaming={streaming} onSend={onSend} onStop={stop} />
         <p className="mt-2 text-center text-xs text-muted-foreground">

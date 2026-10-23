@@ -37,7 +37,7 @@ export default function MarkdownRenderer({ content, citations }: { content: stri
                 onClick={() => citations.onCite(cite)}
                 aria-label={`Show source ${cite}`}
                 className={cn(
-                  "mx-0.5 inline-flex h-[18px] min-w-[18px] -translate-y-px items-center justify-center rounded-md px-1 align-middle text-[11px] font-medium tabular-nums no-underline transition-colors",
+                  "mx-0.5 inline-flex h-[1.125rem] min-w-[1.125rem] -translate-y-px items-center justify-center rounded-md px-1 align-middle text-[0.6875rem] font-medium tabular-nums no-underline transition-colors",
                   citations.kind === "web"
                     ? "bg-step-route/10 text-step-route hover:bg-step-route/20"
                     : "bg-step-docs/10 text-step-docs hover:bg-step-docs/20",

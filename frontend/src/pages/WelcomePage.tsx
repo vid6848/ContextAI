@@ -66,25 +66,25 @@ function DemoReplay({ onReplay }: { onReplay: () => void }) {
   return (
     <div className="rounded-3xl border bg-card p-5 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_24px_48px_-24px_rgb(0_0_0/0.18)] sm:p-6">
       <div className="flex flex-col items-end">
-        <span className="mb-1.5 flex items-center gap-2 rounded-xl border bg-background py-1.5 pr-3 pl-2 text-[13px]">
+        <span className="mb-1.5 flex items-center gap-2 rounded-xl border bg-background py-1.5 pr-3 pl-2 text-[0.8125rem]">
           <span className="flex size-6 items-center justify-center rounded-md bg-step-docs/10 text-step-docs">
             <FileText className="size-3.5" />
           </span>
           northwind_q3.pdf
         </span>
-        <p className="max-w-[85%] rounded-2xl rounded-br-md bg-secondary px-4 py-2.5 text-[15px]">
+        <p className="max-w-[85%] rounded-2xl rounded-br-md bg-secondary px-4 py-2.5 text-[1rem]">
           What are the main risks in this report? Keep it short.
         </p>
       </div>
 
-      <div className="mt-6 min-h-[168px]">
+      <div className="mt-6 min-h-[10.5rem]">
         <AgentTrace meta={{ steps }} streaming={thinking} defaultOpen />
-        <p className="text-[15.5px] leading-relaxed" aria-live="polite">
+        <p className="text-[1.0625rem] leading-relaxed" aria-live="polite">
           {TOKENS.slice(0, words).map((t, i) => {
             const cite = /^\[(\d)\]([.,]?)$/.exec(t)
             return cite ? (
               <span key={i}>
-                <span className="mx-0.5 inline-flex h-[18px] min-w-[18px] -translate-y-px items-center justify-center rounded-md bg-step-docs/10 px-1 align-middle text-[11px] font-medium text-step-docs">
+                <span className="mx-0.5 inline-flex h-[1.125rem] min-w-[1.125rem] -translate-y-px items-center justify-center rounded-md bg-step-docs/10 px-1 align-middle text-[0.6875rem] font-medium text-step-docs">
                   {cite[1]}
                 </span>
                 {cite[2]}{" "}
@@ -136,10 +136,10 @@ function WelcomePage() {
 
   return (
     <div className="min-h-dvh overflow-y-auto">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5 sm:px-8">
+      <header className="mx-auto flex max-w-[92rem] items-center justify-between px-5 py-5 sm:px-8 xl:px-14">
         <span className="flex items-center gap-2">
           <Logo className="size-6" />
-          <span className="text-[16px] font-semibold tracking-[-0.01em]">ContextAI</span>
+          <span className="text-[1rem] font-semibold tracking-[-0.01em]">ContextAI</span>
         </span>
         <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
           <a href={REPO_URL} target="_blank" rel="noreferrer noopener">
@@ -148,22 +148,22 @@ function WelcomePage() {
         </Button>
       </header>
 
-      <main className="mx-auto grid max-w-6xl items-center gap-12 px-5 pt-8 pb-20 sm:px-8 lg:grid-cols-[1fr_1.05fr] lg:gap-16 lg:pt-16">
+      <main className="mx-auto grid max-w-[92rem] items-center gap-12 px-5 pt-8 pb-20 sm:px-8 xl:px-14 lg:grid-cols-[1fr_1.15fr] lg:gap-16 lg:pt-16">
         <section>
-          <h1 className="max-w-[14ch] text-[44px] leading-[1.05] font-medium tracking-[-0.03em] sm:text-[56px]">
+          <h1 className="max-w-[14ch] text-[clamp(2.75rem,5.5vw,5rem)] leading-[1.03] font-medium tracking-[-0.03em]">
             An assistant that shows its work.
           </h1>
-          <p className="mt-6 max-w-[46ch] text-[17px] leading-relaxed text-muted-foreground">
+          <p className="mt-6 max-w-[46ch] text-[1.1875rem] leading-relaxed text-muted-foreground">
             ContextAI remembers what you tell it, checks live data, and reads your PDFs. Every answer comes with the
             steps it took and the sources it used.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Button asChild size="lg" className="h-11 rounded-full px-6 text-[15px]">
+            <Button asChild size="lg" className="h-11 rounded-full px-6 text-[0.9375rem]">
               <Link to="/" onClick={markWelcomed}>
                 Start chatting
               </Link>
             </Button>
-            <Button asChild variant="outline" size="lg" className="h-11 rounded-full px-6 text-[15px]">
+            <Button asChild variant="outline" size="lg" className="h-11 rounded-full px-6 text-[0.9375rem]">
               <a href={REPO_URL} target="_blank" rel="noreferrer noopener">
                 Read the code
               </a>
@@ -176,7 +176,7 @@ function WelcomePage() {
       </main>
 
       <section className="border-t bg-sidebar/60">
-        <div className="mx-auto max-w-6xl px-5 py-16 sm:px-8">
+        <div className="mx-auto max-w-[92rem] px-5 py-16 sm:px-8 xl:px-14">
           <ol className="relative grid gap-10 border-l pl-8 md:grid-cols-3 md:border-l-0 md:pl-0">
             {CAPABILITIES.map((c) => (
               <li key={c.title} className="relative md:border-t md:pt-6">
@@ -184,7 +184,7 @@ function WelcomePage() {
                   className={cn("absolute top-1.5 -left-[37px] size-[10px] rounded-full md:-top-[5px] md:left-0", c.dot)}
                   aria-hidden
                 />
-                <h2 className="text-[17px] font-medium">{c.title}</h2>
+                <h2 className="text-[1.0625rem] font-medium">{c.title}</h2>
                 <p className="mt-2 max-w-[38ch] leading-relaxed text-muted-foreground">{c.body}</p>
               </li>
             ))}
