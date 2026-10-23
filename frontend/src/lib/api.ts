@@ -1,5 +1,5 @@
 import { parseSSE } from "./sse"
-import type { Conversation, Reminder, StreamEvent } from "./types"
+import type { Conversation, Feedback, Reminder, StreamEvent } from "./types"
 
 const API = "/api/v1"
 const USER_KEY = "contextai_user_id"
@@ -61,6 +61,11 @@ export const api = {
   renameConversation: (id: string, title: string) =>
     request(`/conversations/${id}`, { method: "PATCH", body: JSON.stringify({ title }) }),
   deleteConversation: (id: string) => request(`/conversations/${id}`, { method: "DELETE" }),
+  setFeedback: (conversationId: string, messageId: number, rating: Feedback | null) =>
+    request(`/conversations/${conversationId}/messages/${messageId}/feedback`, {
+      method: "PUT",
+      body: JSON.stringify({ rating }),
+    }),
 
   documentStats: () => request<{ total_chunks: number }>("/documents"),
   uploadDocument: (file: File) => {

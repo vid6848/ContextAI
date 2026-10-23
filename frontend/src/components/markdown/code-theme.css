@@ -1,0 +1,27 @@
+/* Syntax colours reuse the trace palette so code feels native to the app in both themes. */
+.hljs-comment,
+.hljs-quote { color: var(--muted-foreground); font-style: italic; }
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-built_in,
+.hljs-type { color: var(--step-route); }
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-template-tag { color: var(--step-docs); }
+.hljs-number,
+.hljs-literal,
+.hljs-symbol,
+.hljs-attr,
+.hljs-variable.language_ { color: var(--step-tool); }
+.hljs-title,
+.hljs-title.function_,
+.hljs-title.class_,
+.hljs-section,
+.hljs-name { color: var(--step-memory); }
+.hljs-deletion,
+.hljs-meta .hljs-keyword { color: var(--step-error); }
+.hljs-meta,
+.hljs-punctuation { color: var(--muted-foreground); }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 600; }
