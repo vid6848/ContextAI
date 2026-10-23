@@ -158,7 +158,8 @@ def _compact(value: Any) -> Any:
 def agent_step(step_id: str, label: str) -> Iterator[dict[str, Any]]:
     """Time a unit of agent work and stream its start/end as `step` events.
 
-    The body may update step["label"] and step["detail"]. Under graph.invoke() the stream writer is a
+    The body may update step["label"] and step["detail"], and set step["failed"] = True to report a handled
+    failure (e.g. a tool returning an error) without raising. Under graph.invoke() the stream writer is a
     no-op, so the same nodes serve both the streaming and non-streaming endpoints.
     """
     writer = get_stream_writer()
@@ -167,7 +168,7 @@ def agent_step(step_id: str, label: str) -> Iterator[dict[str, Any]]:
     started = time.perf_counter()
     try:
         yield step
-        step["status"] = "done"
+        step["status"] = "error" if step.pop("failed", False) else "done"
     except Exception:
         step["status"] = "error"
         raise
@@ -304,6 +305,7 @@ def build_agent_graph(
             res = tool.run(msg)
             ok = bool(res.get("success", True))
             step["label"] = f"Used {display}" if ok else f"{display} failed: {res.get('error', 'unknown error')}"
+            step["failed"] = not ok
             step["detail"] = {"input": msg, "output": _compact(res)}
         return {"tool_name": name, "tool_result": res, "steps": [step]}
 
