@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     vapid_private_key: str = ""
     vapid_contact: str = "mailto:admin@contextai.local"
 
+    # Sign-in (Supabase Auth). The URL and publishable key are public (they ship to the browser);
+    # tokens are verified against the project's JWKS, so no secret is needed. Empty = guests only.
+    supabase_url: str = ""
+    supabase_publishable_key: str = ""
+    auth_required: bool = False  # True: no guest mode
+
     # Abuse protection (per client IP, per minute) and upload size cap
     rate_limit_chat_per_minute: int = 20
     rate_limit_upload_per_minute: int = 5

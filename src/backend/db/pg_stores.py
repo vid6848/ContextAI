@@ -82,6 +82,12 @@ class PgMemoryStore:
         with self.db.connect() as conn:
             return conn.execute("DELETE FROM memories WHERE id = ? AND user_id = ?", (memory_id, user_id)).rowcount > 0
 
+    def reassign_user(self, old_user_id: str, new_user_id: str) -> int:
+        with self.db.connect() as conn:
+            return conn.execute(
+                "UPDATE memories SET user_id = ? WHERE user_id = ?", (new_user_id, old_user_id)
+            ).rowcount
+
     def delete_user_memories(self, user_id: str) -> None:
         with self.db.connect() as conn:
             conn.execute("DELETE FROM memories WHERE user_id = ?", (user_id,))
@@ -162,6 +168,12 @@ class PgDocumentRAGPipeline(DocumentRAGPipeline):
                 """,
                 (user_id,),
             ).fetchall()
+
+    def reassign_user(self, old_user_id: str, new_user_id: str) -> int:
+        with self.db.connect() as conn:
+            return conn.execute(
+                "UPDATE document_chunks SET user_id = ? WHERE user_id = ?", (new_user_id, old_user_id)
+            ).rowcount
 
     def delete_document(self, user_id: str, document_id: str) -> int:
         with self.db.connect() as conn:

@@ -151,6 +151,12 @@ class ReminderManager:
             )
             return cursor.rowcount > 0
 
+    def reassign_user(self, old_user_id: str, new_user_id: str) -> int:
+        with self.get_connection() as conn:
+            return conn.execute(
+                "UPDATE reminders SET user_id = ? WHERE user_id = ?", (new_user_id, old_user_id)
+            ).rowcount
+
     def complete_reminder(self, reminder_id: int, user_id: str | None = None) -> bool:
         """Mark a reminder as completed."""
         with self.get_connection() as conn:

@@ -106,6 +106,12 @@ class PushService:
         with self._conn() as conn:
             conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", (endpoint,))
 
+    def reassign_user(self, old_user_id: str, new_user_id: str) -> int:
+        with self._conn() as conn:
+            return conn.execute(
+                "UPDATE push_subscriptions SET user_id = ? WHERE user_id = ?", (new_user_id, old_user_id)
+            ).rowcount
+
     def subscriptions(self, user_id: str) -> list[dict[str, Any]]:
         with self._conn() as conn:
             rows = conn.execute("SELECT * FROM push_subscriptions WHERE user_id = ?", (user_id,)).fetchall()
