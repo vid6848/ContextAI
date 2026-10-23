@@ -2,7 +2,7 @@
 
 **An AI assistant that shows its work.** ContextAI remembers what you tell it, checks live data, and reads your PDFs. Every answer streams in alongside the steps the agent took (memory recall, routing, tool calls, document search) and the sources it used.
 
-> 🚧 ContextAI is being built in public as a [5-phase roadmap](#-roadmap). Every change is tracked as an issue and lands through a pull request.
+> 🚧 ContextAI is being built in public as a [5-phase roadmap](#-roadmap). Every change is tracked as a GitHub issue.
 
 ---
 
@@ -10,12 +10,14 @@
 
 | | |
 |---|---|
+| **Tool-using agent** | The model picks tools itself through function calling, runs several in parallel, and chains them: "BTC and ETH prices, and how many ETH per BTC?" fetches both prices, then calls the calculator. A confident TF-IDF classifier still fast-paths simple requests (hybrid router). |
 | **Live agent trace** | Each answer opens with a colour-coded rail of the agent's steps: violet memory, blue routing, amber tools, teal documents, red errors. Each step is timed, and you can expand it to see the exact tool input and output. |
 | **Streaming chat** | Answers stream token by token over Server-Sent Events, with Stop (Esc), Regenerate, Edit-and-resend, Copy and 👍/👎 feedback. |
-| **PDF Q&A with citations** | Drag a PDF into the chat and ask about it. Answers cite passages inline as `[1]`, and clicking one opens the exact excerpt and page. Documents are private to their owner. |
-| **Live tools** | CoinGecko crypto prices and OpenWeather (shown as cards), Tavily web search (with source cards), and a safe AST-based calculator. |
-| **Memory** | Per-conversation history in SQLite, plus long-term semantic memory in ChromaDB that carries useful facts across chats. |
-| **Chat app** | Server-side conversations with LLM-written titles, a grouped sidebar with search, rename and delete, light/dark mode, keyboard shortcuts, mobile layout, and a landing page. |
+| **PDF Q&A with citations** | Drag a PDF into the chat and ask about it. Chunks follow the document's headings, retrieval is re-ranked (semantic + keyword), and off-topic questions get "not in your documents" instead of a guess. Answers cite passages inline as `[1]`, and clicking one opens the exact excerpt, page and section. Manage your documents from the account menu. |
+| **Live tools** | CoinGecko crypto prices and OpenWeather (shown as cards), Tavily web search (with source cards and today's date for freshness), and a safe AST-based calculator. |
+| **Long-term memory** | After each reply an LLM pass extracts durable facts ("Prefers Python examples") and reconciles them with what's stored: a move *updates* your city instead of contradicting it. A "Memory updated" chip shows what changed, and the Memory page lets you edit or delete anything. |
+| **Reminders** | "Remind me to call mom tomorrow evening" works from chat. Times are parsed in your timezone, and due reminders show a toast and a browser notification. |
+| **Chat app** | An animated landing page (`/`) and the chat (`/chat`) share one look. Server-side conversations with LLM-written titles, a grouped sidebar with search, rename and delete, light/dark mode, keyboard shortcuts, and a mobile layout. |
 | **Rich answers** | Syntax-highlighted code with copy, KaTeX math (prices stay prices), and GFM tables. |
 | **Hardening** | Per-browser user isolation, rate limits, streamed upload size caps, PDF validation, and errors that never leak keys or internals. |
 
@@ -25,16 +27,19 @@
 
 ```text
 React SPA (Vite, TS, Tailwind, shadcn/ui, Zustand)
-   │  REST + Server-Sent Events  (/api/v1/chat/stream: meta → step* → token* → done → title)
+   │  REST + Server-Sent Events  (/api/v1/chat/stream: meta → step* → token* → done → memory → title)
    ▼
-FastAPI ──────────────────────────────── serves the built SPA on the same origin
+FastAPI ─────────────────────────────────── serves the built SPA on the same origin
    │
    ▼
 LangGraph agent
-   retrieve_memory ─▶ classify_intent ─┬─▶ calculator / weather / crypto / web_search ─┐
-   (SQLite + Chroma)  (TF-IDF + LR, or  ├─▶ document_rag (Chroma, per-user, numbered)  ─┼─▶ generate_response ─▶ save_memory
-                       attachments)     └──────────────────────────────────────────────┘   (LiteLLM → Gemini,
-                                                                                            streamed, cancellable)
+   retrieve_memory ─▶ classify_intent ─┬─ confident ─▶ fixed tool node ─▶ generate_response ─┐
+   (history + facts)  (TF-IDF + LR)    │                                                     ├─▶ save_memory
+                                       └─ otherwise ─▶ llm_agent ────────────────────────────┘
+                                                       function-calling loop (≤ 4 rounds):
+                                                       calculator · weather · crypto · web_search ·
+                                                       search_documents · create/list_reminder
+   after the reply: LLM memory extraction (add / update / delete facts) · LLM chat title
 ```
 
 Every node runs inside a timed `agent_step` that streams `running → done/error` events through LangGraph's stream writer. The same graph serves the streaming and the plain JSON endpoint.
@@ -45,11 +50,11 @@ Every node runs inside a timed `agent_step` that streams `running → done/error
 |---|---|---|
 | Frontend | React 19, TypeScript, Vite, Tailwind v4, shadcn/ui, Zustand, React Router | |
 | API | FastAPI + Server-Sent Events | |
-| Agent | LangGraph, TF-IDF + Logistic Regression router | LLM function calling with multi-tool chaining ([#13](https://github.com/vid6848/ContextAI/issues/13)) |
+| Agent | LangGraph, Gemini function calling with multi-tool chaining, TF-IDF + Logistic Regression fast path | |
 | LLM | Gemini via LiteLLM (swap providers with one env var) | |
-| Data | SQLite + ChromaDB | Supabase Postgres + pgvector ([#18](https://github.com/vid6848/ContextAI/issues/18)) |
+| Data | SQLite + ChromaDB, heading-aware PDF chunking, hybrid re-ranking, dateparser | Supabase Postgres + pgvector ([#18](https://github.com/vid6848/ContextAI/issues/18)) |
 | Auth | Anonymous per-browser id | Supabase Auth with Google ([#17](https://github.com/vid6848/ContextAI/issues/17)) |
-| Quality | pytest (109), Vitest, ruff, oxlint, GitHub Actions | Eval suite ([#20](https://github.com/vid6848/ContextAI/issues/20)), Langfuse ([#21](https://github.com/vid6848/ContextAI/issues/21)) |
+| Quality | pytest (148), Vitest (18), ruff, oxlint, GitHub Actions | Eval suite ([#20](https://github.com/vid6848/ContextAI/issues/20)), Langfuse ([#21](https://github.com/vid6848/ContextAI/issues/21)) |
 | Hosting | Docker (multi-stage), Railway config | Hugging Face Spaces ([#19](https://github.com/vid6848/ContextAI/issues/19)) |
 
 ---
@@ -72,11 +77,11 @@ Tracked with [milestones](https://github.com/vid6848/ContextAI/milestones) and [
 - [x] [#11](https://github.com/vid6848/ContextAI/issues/11) Inline citations, sources panel, weather and crypto cards
 - [x] [#12](https://github.com/vid6848/ContextAI/issues/12) Landing page, shortcuts, connection banner, accessibility
 
-### Phase 3: Smarter agent
-- [ ] [#13](https://github.com/vid6848/ContextAI/issues/13) LLM function calling with multi-tool chaining (hybrid router)
-- [ ] [#14](https://github.com/vid6848/ContextAI/issues/14) RAG upgrade: structure-aware chunking, re-ranking, document management
-- [ ] [#15](https://github.com/vid6848/ContextAI/issues/15) LLM-extracted long-term memory, with a Memory page
-- [ ] [#16](https://github.com/vid6848/ContextAI/issues/16) Natural-language reminders with notifications
+### ✅ Phase 3: Smarter agent
+- [x] [#13](https://github.com/vid6848/ContextAI/issues/13) LLM function calling with multi-tool chaining (hybrid router)
+- [x] [#14](https://github.com/vid6848/ContextAI/issues/14) RAG upgrade: structure-aware chunking, re-ranking, document management
+- [x] [#15](https://github.com/vid6848/ContextAI/issues/15) LLM-extracted long-term memory, with a Memory page
+- [x] [#16](https://github.com/vid6848/ContextAI/issues/16) Natural-language reminders with notifications
 
 ### Phase 4: Accounts, persistence & deploy
 - [ ] [#17](https://github.com/vid6848/ContextAI/issues/17) Supabase Auth (Google) + guest mode
@@ -129,6 +134,9 @@ API docs are at http://localhost:8000/docs.
 | `TAVILY_API_KEY` | | Web search tool ([tavily.com](https://tavily.com)) |
 | `OPENWEATHER_API_KEY` | | Weather tool ([openweathermap.org](https://openweathermap.org/api)); new keys can take ~2 hours to activate |
 | `SQLITE_DB_PATH` / `CHROMA_PERSIST_DIR` | | Storage locations (default `./data`) |
+| `ROUTER_MODE` | | `hybrid` (default), `llm` (always function calling) or `classifier` |
+| `HYBRID_CONFIDENCE_THRESHOLD` / `MAX_TOOL_ROUNDS` | | Classifier fast-path cut-off (0.8) and tool-loop limit (4) |
+| `MEMORY_MODE` | | `llm` (extract facts, default) or `heuristic` (store raw messages) |
 | `RATE_LIMIT_CHAT_PER_MINUTE` / `RATE_LIMIT_UPLOAD_PER_MINUTE` / `MAX_UPLOAD_MB` | | Abuse protection (defaults 20 / 5 / 10) |
 
 ### Tests and checks
