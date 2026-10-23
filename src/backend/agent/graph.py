@@ -94,7 +94,12 @@ def get_default_vector_store() -> ChromaMemoryStore:
     """Get or initialize singleton instance of ChromaMemoryStore."""
     global _default_vector_store
     if _default_vector_store is None:
-        _default_vector_store = ChromaMemoryStore()
+        if settings.database_url:
+            from src.backend.db.pg_stores import PgMemoryStore
+
+            _default_vector_store = PgMemoryStore(settings.database_url)
+        else:
+            _default_vector_store = ChromaMemoryStore()
     return _default_vector_store
 
 
@@ -134,7 +139,12 @@ def get_default_rag_pipeline() -> DocumentRAGPipeline:
     """Get or initialize singleton instance of DocumentRAGPipeline."""
     global _default_rag_pipeline
     if _default_rag_pipeline is None:
-        _default_rag_pipeline = DocumentRAGPipeline()
+        if settings.database_url:
+            from src.backend.db.pg_stores import PgDocumentRAGPipeline
+
+            _default_rag_pipeline = PgDocumentRAGPipeline(settings.database_url)
+        else:
+            _default_rag_pipeline = DocumentRAGPipeline()
     return _default_rag_pipeline
 
 

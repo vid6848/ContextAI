@@ -13,15 +13,14 @@ def test_sqlite_init_db(tmp_path):
     manager = SQLiteManager(db_path=db_file)
 
     with manager.get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='conversation_history';")
-        table = cursor.fetchone()
+        table = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='conversation_history';"
+        ).fetchone()
         assert table is not None
         assert table["name"] == "conversation_history"
 
         # Check table columns
-        cursor.execute("PRAGMA table_info(conversation_history);")
-        columns = {col["name"]: col["type"] for col in cursor.fetchall()}
+        columns = {col["name"]: col["type"] for col in conn.execute("PRAGMA table_info(conversation_history);")}
         assert "id" in columns
         assert "user_id" in columns
         assert "role" in columns

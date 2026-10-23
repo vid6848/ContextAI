@@ -151,11 +151,7 @@ class DocumentRAGPipeline:
             pdf_doc.close()
 
             if documents_to_add:
-                self.collection.upsert(
-                    documents=documents_to_add,
-                    metadatas=metadatas_to_add,
-                    ids=ids_to_add,
-                )
+                self._upsert(ids_to_add, documents_to_add, metadatas_to_add)
 
             return {
                 "success": True,
@@ -187,12 +183,20 @@ class DocumentRAGPipeline:
             return []
 
         # Over-fetch candidates, then re-rank with keyword coverage and drop unrelated passages
-        results = self.collection.query(
-            query_texts=[query],
-            n_results=min(max(limit * 4, 12), total),
-            where=self._where(user_id, document_names),
-        )
+        chunks = self._candidates(query, min(max(limit * 4, 12), total), user_id, document_names)
+        # When the user attached specific files, "summarize this" must still return their passages
+        return rerank(query, chunks, limit, gate=not document_names)
 
+    # ---- storage primitives (overridden by the Postgres/pgvector store) ----
+
+    def _upsert(self, ids: list[str], documents: list[str], metadatas: list[dict[str, Any]]) -> None:
+        self.collection.upsert(documents=documents, metadatas=metadatas, ids=ids)
+
+    def _candidates(
+        self, query: str, n: int, user_id: str | None, document_names: list[str] | None
+    ) -> list[dict[str, Any]]:
+        """Nearest chunks with squared-L2 distance over unit vectors (what rerank expects)."""
+        results = self.collection.query(query_texts=[query], n_results=n, where=self._where(user_id, document_names))
         chunks: list[dict[str, Any]] = []
         if results and results.get("documents") and results["documents"][0]:
             docs = results["documents"][0]
@@ -209,8 +213,7 @@ class DocumentRAGPipeline:
                     "distance": dist,
                     "section": meta.get("section"),
                 })
-        # When the user attached specific files, "summarize this" must still return their passages
-        return rerank(query, chunks, limit, gate=not document_names)
+        return chunks
 
     def list_documents(self, user_id: str) -> list[dict[str, Any]]:
         """The user's documents with page and passage counts, newest first."""
