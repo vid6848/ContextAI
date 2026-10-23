@@ -1,9 +1,12 @@
 """Crypto price tool integrating with CoinGecko API."""
 
+import logging
 import re
 from typing import Any
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 # Common cryptocurrency symbol to CoinGecko ID mapping
 _COIN_MAPPING = {
@@ -109,14 +112,17 @@ class CryptoTool:
                     "error": "CoinGecko API rate limit reached. Please try again shortly.",
                 }
             else:
+                logger.warning("CoinGecko error %s: %s", response.status_code, response.text[:500])
                 return {
                     "success": False,
-                    "error": f"CoinGecko API error (status {response.status_code}): {response.text}",
+                    "error": f"Crypto price service returned an error (status {response.status_code}).",
                 }
         except requests.RequestException as err:
+            # Exception text can contain the request URL, including API keys in query params
+            logger.warning("%s request failed: %s", self.__class__.__name__, type(err).__name__)
             return {
                 "success": False,
-                "error": f"Crypto network request failed: {err}",
+                "error": "Crypto price service is unreachable right now.",
             }
 
     def run(self, query: str) -> dict[str, Any]:

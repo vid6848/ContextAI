@@ -111,3 +111,22 @@ def test_rag_file_not_found(tmp_path):
 
     with pytest.raises(FileNotFoundError):
         rag.ingest_pdf(str(tmp_path / "non_existent.pdf"))
+
+
+def test_documents_are_isolated_per_user_and_deduplicated(tmp_path):
+    """A user's chunks are invisible to other users, and re-uploading the same PDF doesn't duplicate chunks."""
+    pdf_path = str(tmp_path / "tmp8f2k1.pdf")
+    doc = pymupdf.open()
+    doc.new_page().insert_text((50, 50), "Alice's private salary details are confidential.")
+    doc.save(pdf_path)
+    doc.close()
+
+    rag = DocumentRAGPipeline(persist_dir=str(tmp_path / "iso_chroma"), collection_name="iso_docs")
+    rag.ingest_pdf(pdf_path, user_id="alice", document_name="salary.pdf")
+    rag.ingest_pdf(pdf_path, user_id="alice", document_name="salary.pdf")
+
+    assert rag.count("alice") == 1
+    assert rag.count("bob") == 0
+    assert rag.retrieve("salary details", user_id="bob") == []
+    results = rag.retrieve("salary details", user_id="alice")
+    assert results[0]["document_name"] == "salary.pdf"

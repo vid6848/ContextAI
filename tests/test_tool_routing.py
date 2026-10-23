@@ -140,7 +140,7 @@ def test_routing_document_rag_with_indexed_document(tmp_path):
 
     chroma_dir = str(tmp_path / "rag_chroma_route")
     rag = DocumentRAGPipeline(persist_dir=chroma_dir, collection_name="route_docs")
-    rag.ingest_pdf(pdf_path)
+    rag.ingest_pdf(pdf_path, user_id="default_user")
 
     mock_llm = MagicMock()
     mock_llm.generate_response.return_value = (
