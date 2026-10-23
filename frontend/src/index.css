@@ -145,6 +145,11 @@
   [role="button"]:not(:disabled) {
     cursor: pointer;
   }
+  /* Visible keyboard focus for custom controls (shadcn components set their own ring) */
+  :where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
