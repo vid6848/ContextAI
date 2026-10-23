@@ -35,8 +35,17 @@ const RING: Record<StepKind, string> = {
  * The agent's work for one answer, as a rail of colour-coded nodes. Open while the answer streams,
  * folded into a one-line summary afterwards; every finished step expands to show its input/output.
  */
-export function AgentTrace({ meta, streaming }: { meta?: MessageMeta; streaming?: boolean }) {
-  const [userOpen, setUserOpen] = useState(false)
+export function AgentTrace({
+  meta,
+  streaming,
+  defaultOpen = false,
+}: {
+  meta?: MessageMeta
+  streaming?: boolean
+  /** Stay expanded after streaming ends (the landing-page demo) instead of folding into the summary. */
+  defaultOpen?: boolean
+}) {
+  const [userOpen, setUserOpen] = useState(defaultOpen)
   const steps = meta?.steps ?? []
   if (!steps.length && !streaming) return null
 

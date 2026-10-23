@@ -25,7 +25,7 @@ export default function MarkdownRenderer({ content, citations }: { content: stri
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }], rehypeKatex]}
+      rehypePlugins={[[rehypeHighlight, { detect: true }], rehypeKatex]}
       components={{
         pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
         a: ({ node: _node, href, children, ...props }) => {
