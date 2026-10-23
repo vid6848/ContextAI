@@ -67,15 +67,6 @@ export const api = {
       body: JSON.stringify({ rating }),
     }),
 
-  documentStats: () => request<{ total_chunks: number }>("/documents"),
-  uploadDocument: (file: File) => {
-    const form = new FormData()
-    form.append("file", file)
-    return request<{ document_name: string; total_pages: number; total_chunks: number }>("/documents/upload", {
-      method: "POST",
-      body: form,
-    })
-  },
   clearMemory: () => request("/memory/clear", { method: "POST", body: JSON.stringify({ user_id: userId }) }),
 
   listReminders: () => request<{ reminders: Reminder[] }>("/reminders").then((r) => r.reminders),
@@ -85,8 +76,38 @@ export const api = {
   deleteReminder: (id: number) => request(`/reminders/${id}`, { method: "DELETE" }),
 }
 
+export interface UploadResult {
+  document_name: string
+  total_pages: number
+  total_chunks: number
+}
+
+export const MAX_UPLOAD_MB = 10
+
+/** Upload a PDF with progress (fetch can't report upload progress, XHR can). */
+export function uploadWithProgress(file: File, onProgress: (fraction: number) => void, signal?: AbortSignal) {
+  return new Promise<UploadResult>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open("POST", `${API}/documents/upload?user_id=${encodeURIComponent(userId)}`)
+    xhr.responseType = "json"
+    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total)
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) return resolve(xhr.response as UploadResult)
+      const detail = xhr.response?.detail
+      reject(new ApiError(xhr.status, typeof detail === "string" ? detail : `Upload failed (${xhr.status}).`))
+    }
+    xhr.onerror = () => reject(new ApiError(0, "Upload failed. Check your connection."))
+    xhr.onabort = () => reject(new DOMException("Upload cancelled", "AbortError"))
+    signal?.addEventListener("abort", () => xhr.abort())
+    const form = new FormData()
+    form.append("file", file)
+    xhr.send(form)
+  })
+}
+
 export interface StreamRequest {
   message: string
+  attachments?: string[]
   conversation_id: string | null
   replace_from_message_id?: number | null
 }
