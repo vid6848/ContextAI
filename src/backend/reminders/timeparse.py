@@ -50,6 +50,7 @@ def parse_when(text: str, timezone: str | None = None, now: datetime | None = No
     phrase = _normalise(text)
     parsed = dateparser.parse(
         phrase,
+        languages=["en"],  # trying every language is slow on unparseable input and can misread English
         settings={
             "TIMEZONE": str(tz),
             "TO_TIMEZONE": str(tz),
@@ -60,7 +61,10 @@ def parse_when(text: str, timezone: str | None = None, now: datetime | None = No
     )
     if parsed is None:
         return None
-    # dateparser sometimes jumps a time-only phrase to tomorrow even when today's slot is still ahead
-    if not _DATE_WORDS.search(phrase) and parsed - timedelta(days=1) > now_local:
-        parsed -= timedelta(days=1)
+    if not _DATE_WORDS.search(phrase):
+        # A time-only phrase means its next occurrence: today if still ahead, otherwise tomorrow
+        if parsed - timedelta(days=1) > now_local:
+            parsed -= timedelta(days=1)
+        elif parsed <= now_local:
+            parsed += timedelta(days=1)
     return parsed.astimezone(UTC)
