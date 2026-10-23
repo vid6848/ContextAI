@@ -2,8 +2,9 @@
 
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
+
 from src.backend.core.config import settings
 
 
@@ -67,7 +68,7 @@ class ReminderManager:
         if not scheduled_time.strip():
             raise ValueError("Scheduled time cannot be empty.")
 
-        created_at = datetime.now(timezone.utc).isoformat()
+        created_at = datetime.now(UTC).isoformat()
         status = "pending"
 
         with self.get_connection() as conn:

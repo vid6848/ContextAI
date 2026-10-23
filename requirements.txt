@@ -1,25 +1,22 @@
-# Backend Framework
-fastapi>=0.110.0
-uvicorn>=0.28.0
-pydantic>=2.6.0
-pydantic-settings>=2.2.0
-python-dotenv>=1.0.1
+# Runtime dependencies (pinned for reproducible builds).
+# Dev/test tooling lives in requirements-dev.txt.
 
-# Frontend
-streamlit>=1.32.0
-requests>=2.31.0
+# Backend framework
+fastapi==0.141.1
+uvicorn==0.54.0
+pydantic==2.13.5
+pydantic-settings==2.15.0
+python-dotenv==1.2.3
+python-multipart==0.0.32
+requests==2.34.2
 
-# Agent Orchestration & LLM Abstraction
-langgraph>=0.0.30
-litellm>=1.35.0
+# Agent orchestration & LLM abstraction
+langgraph==1.2.12
+litellm==1.102.1
 
-# Memory, RAG & Documents
-chromadb>=0.4.24
-pymupdf>=1.24.0
-# Note: sqlite3 is included in Python standard library
+# Memory, RAG & documents
+chromadb==1.5.9
+pymupdf==1.28.2
 
-# Machine Learning (Intent Classification)
-scikit-learn>=1.4.0
-
-# Testing
-pytest>=8.1.0
+# Intent classification
+scikit-learn==1.9.1

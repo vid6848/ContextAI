@@ -2,8 +2,10 @@
 
 import os
 from typing import Any
+
 import chromadb
 import pymupdf
+
 from src.backend.core.config import settings
 
 
@@ -160,7 +162,7 @@ class DocumentRAGPipeline:
             ids = results.get("ids", [[]])[0]
             distances = results.get("distances", [[]])[0] if results.get("distances") else [None] * len(docs)
 
-            for doc, meta, mid, dist in zip(docs, metas, ids, distances):
+            for doc, meta, mid, dist in zip(docs, metas, ids, distances, strict=False):
                 chunks.append({
                     "content": doc,
                     "document_name": meta.get("document_name", "Unknown"),

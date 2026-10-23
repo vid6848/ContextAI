@@ -1,10 +1,11 @@
 """Tests for ReminderManager and reminders API endpoints."""
 
 import io
-from unittest.mock import patch, MagicMock
+
+import pymupdf
 import pytest
 from fastapi.testclient import TestClient
-import pymupdf
+
 from src.backend.main import app
 from src.backend.reminders.reminder_manager import ReminderManager
 

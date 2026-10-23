@@ -1,36 +1,28 @@
-# ContextAI Production Dockerfile
-# Optimized for Railway single-container deployment
+# ContextAI production image: FastAPI serves both the API and the web UI.
+FROM python:3.13-slim
 
-FROM python:3.11-slim
-
-# Prevent Python from writing bytecode and enable unbuffered logging
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    PORT=8000
 
 WORKDIR /app
 
-# Install minimal OS dependencies for wheel compilation and health checks
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+# Run as an unprivileged user
+RUN useradd --create-home --uid 1000 app
 
-# Install Python dependencies first for caching layers
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application source and assets
-COPY src/ ./src/
-COPY .streamlit/ ./.streamlit/
-COPY start.sh .
+COPY --chown=app:app src/ ./src/
+COPY --chown=app:app start.sh .
+RUN mkdir -p /app/data/chroma && chown -R app:app /app/data && chmod +x /app/start.sh
 
-# Ensure runtime directories exist and start script is executable
-RUN mkdir -p /app/data/chroma && chmod +x /app/start.sh
+USER app
 
-# Default Streamlit port (Railway overrides this dynamically with $PORT)
-EXPOSE 8501
+# Bake the Chroma embedding model into the image so the first request after a restart isn't slow
+RUN python -c "from chromadb.utils.embedding_functions import DefaultEmbeddingFunction; DefaultEmbeddingFunction()(['warmup'])"
 
-# Start the unified application
+EXPOSE 8000
+
 CMD ["/bin/bash", "/app/start.sh"]
