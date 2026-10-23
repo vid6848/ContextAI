@@ -22,6 +22,8 @@ export interface MessageMeta {
   steps?: AgentStep[]
   stopped?: boolean
   feedback?: Feedback
+  /** PDFs attached to a user message. */
+  attachments?: string[]
 }
 
 export type Feedback = "up" | "down"

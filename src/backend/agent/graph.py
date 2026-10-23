@@ -271,14 +271,22 @@ def build_agent_graph(
         """Classify user intent using TF-IDF + Logistic Regression."""
         message = _extract_message(state)
         active_classifier = classifier or get_default_classifier()
+        attachments = state.get("attachments") or []
         with agent_step("intent", "Classifying intent") as step:
-            pred = active_classifier.predict(message)
-            step["label"] = f"Classified intent: {pred.intent} ({pred.confidence:.0%})"
-            step["detail"] = {"intent": pred.intent, "confidence": round(pred.confidence, 3)}
+            if attachments:
+                # The user pointed at specific files; no need to guess
+                intent, confidence = "DOCUMENT", 1.0
+                step["label"] = f"Routed to your attached {'file' if len(attachments) == 1 else 'files'}"
+                step["detail"] = {"intent": intent, "attachments": attachments}
+            else:
+                pred = active_classifier.predict(message)
+                intent, confidence = pred.intent, pred.confidence
+                step["label"] = f"Classified intent: {intent} ({confidence:.0%})"
+                step["detail"] = {"intent": intent, "confidence": round(confidence, 3)}
         return {
-            "intent": pred.intent,
-            "current_intent": pred.intent,
-            "confidence": pred.confidence,
+            "intent": intent,
+            "current_intent": intent,
+            "confidence": confidence,
             "steps": [step],
         }
 
@@ -330,7 +338,11 @@ def build_agent_graph(
         msg = _extract_message(state)
         pipeline = rag_pipeline or get_default_rag_pipeline()
         with agent_step("tool:document_rag", "Searching your documents") as step:
-            chunks = pipeline.retrieve(msg, limit=4, user_id=state.get("user_id") or "default_user")
+            attachments = state.get("attachments") or None
+            chunks = pipeline.retrieve(
+                msg, limit=6 if attachments else 4, user_id=state.get("user_id") or "default_user",
+                document_names=attachments,
+            )
             _, sources = pipeline.format_context(chunks)
             step["label"] = (
                 f"Found {len(chunks)} relevant {'passage' if len(chunks) == 1 else 'passages'}"
@@ -453,8 +465,13 @@ def build_agent_graph(
         conversation_id = state.get("conversation_id")
         saved: dict[str, int] = {}
         if message:
+            attachments = state.get("attachments")
             saved["user_message_id"] = active_sql.save_message(
-                user_id=user_id, role="user", message=message, conversation_id=conversation_id
+                user_id=user_id,
+                role="user",
+                message=message,
+                conversation_id=conversation_id,
+                metadata={"attachments": attachments} if attachments else None,
             )
         if response:
             saved["assistant_message_id"] = active_sql.save_message(

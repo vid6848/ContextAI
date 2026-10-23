@@ -1,4 +1,4 @@
-import { Check, Copy, Pencil, RotateCcw, ThumbsDown, ThumbsUp } from "lucide-react"
+import { Check, Copy, FileText, Pencil, RotateCcw, ThumbsDown, ThumbsUp } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 
@@ -102,6 +102,18 @@ export function UserMessage({ message }: { message: ChatMessage }) {
 
   return (
     <div className="group flex flex-col items-end">
+      {message.meta?.attachments?.length ? (
+        <ul className="mb-1.5 flex max-w-[85%] flex-wrap justify-end gap-1.5" aria-label="Attached files">
+          {message.meta.attachments.map((name) => (
+            <li key={name} className="flex items-center gap-2 rounded-xl border bg-card py-1.5 pr-3 pl-2 text-[13px]">
+              <span className="flex size-6 items-center justify-center rounded-md bg-step-docs/10 text-step-docs">
+                <FileText className="size-3.5" />
+              </span>
+              <span className="max-w-[200px] truncate">{name}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <div className="max-w-[85%] rounded-2xl rounded-br-md bg-secondary px-4 py-2.5 text-[15.5px] leading-relaxed whitespace-pre-wrap">
         {message.content}
       </div>
