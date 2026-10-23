@@ -1,22 +1,35 @@
 """API routes for ContextAI."""
 
+import logging
 import os
 import tempfile
 from typing import Any
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from src.backend.agent.graph import (
     get_agent_app,
     get_default_rag_pipeline,
     get_default_sql_manager,
+    get_default_vector_store,
 )
+from src.backend.core.config import settings
+from src.backend.core.rate_limit import rate_limit
 from src.backend.llm.client import LLMServiceUnavailableError
 from src.backend.memory.sql_db import DEFAULT_CONVERSATION_TITLE
 from src.backend.reminders.reminder_manager import ReminderManager
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+# Anonymous browser ids are UUIDs; this also keeps ids safe to use in storage keys and filters.
+USER_ID_PATTERN = r"^[A-Za-z0-9_-]{1,64}$"
+UPLOAD_READ_CHUNK = 1024 * 1024
+
+chat_rate_limit = rate_limit("chat", lambda: settings.rate_limit_chat_per_minute)
+upload_rate_limit = rate_limit("upload", lambda: settings.rate_limit_upload_per_minute)
 
 # Global compiled agent instance
 _compiled_agent = None
@@ -47,7 +60,7 @@ class ChatRequest(BaseModel):
     """Schema for incoming chat requests."""
 
     message: str = Field(..., min_length=1, description="The user query or message")
-    user_id: str = Field(default="default_user", description="Identifier for the user")
+    user_id: str = Field(default="default_user", pattern=USER_ID_PATTERN, description="Identifier for the user")
     conversation_id: str | None = Field(
         default=None, description="Existing conversation to continue; a new one is created when omitted"
     )
@@ -68,13 +81,13 @@ class ChatResponse(BaseModel):
 class ClearMemoryRequest(BaseModel):
     """Schema for clearing user conversation memory."""
 
-    user_id: str = Field(default="default_user", description="Identifier for the user")
+    user_id: str = Field(default="default_user", pattern=USER_ID_PATTERN, description="Identifier for the user")
 
 
 class ConversationCreateRequest(BaseModel):
     """Schema for creating an empty conversation."""
 
-    user_id: str = Field(default="default_user", description="Identifier for the user")
+    user_id: str = Field(default="default_user", pattern=USER_ID_PATTERN, description="Identifier for the user")
     title: str | None = Field(default=None, max_length=200)
 
 
@@ -89,7 +102,7 @@ class ReminderCreateRequest(BaseModel):
 
     reminder_text: str = Field(..., min_length=1, description="Text description of the reminder")
     scheduled_time: str = Field(..., min_length=1, description="Due or scheduled timestamp/string")
-    user_id: str = Field(default="default_user", description="Identifier for the user")
+    user_id: str = Field(default="default_user", pattern=USER_ID_PATTERN, description="Identifier for the user")
 
 
 # ============================================================================
@@ -116,7 +129,7 @@ def resolve_conversation(user_id: str, conversation_id: str | None, message: str
 
 
 @router.get("/conversations")
-def list_conversations(user_id: str = Query(default="default_user")):
+def list_conversations(user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
     """List a user's conversations, most recently active first."""
     return {"conversations": get_default_sql_manager().list_conversations(user_id)}
 
@@ -128,7 +141,10 @@ def create_conversation(request: ConversationCreateRequest):
 
 
 @router.get("/conversations/{conversation_id}/messages")
-def get_conversation_messages(conversation_id: str, user_id: str = Query(default="default_user")):
+def get_conversation_messages(
+    conversation_id: str,
+    user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN),
+):
     """Return the full message history of a conversation."""
     sql_mgr = get_default_sql_manager()
     conversation = sql_mgr.get_conversation(conversation_id, user_id)
@@ -144,7 +160,7 @@ def get_conversation_messages(conversation_id: str, user_id: str = Query(default
 def rename_conversation(
     conversation_id: str,
     request: ConversationRenameRequest,
-    user_id: str = Query(default="default_user"),
+    user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN),
 ):
     """Rename a conversation."""
     if not get_default_sql_manager().rename_conversation(conversation_id, user_id, request.title):
@@ -153,7 +169,7 @@ def rename_conversation(
 
 
 @router.delete("/conversations/{conversation_id}")
-def delete_conversation(conversation_id: str, user_id: str = Query(default="default_user")):
+def delete_conversation(conversation_id: str, user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
     """Delete a conversation and all of its messages."""
     if not get_default_sql_manager().delete_conversation(conversation_id, user_id):
         raise HTTPException(status_code=404, detail="Conversation not found.")
@@ -164,7 +180,7 @@ def delete_conversation(conversation_id: str, user_id: str = Query(default="defa
 # Chat Endpoints
 # ============================================================================
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post("/chat", response_model=ChatResponse, dependencies=[Depends(chat_rate_limit)])
 def chat_endpoint(request: ChatRequest):
     """Endpoint for interacting with the ContextAI agent via LangGraph."""
     conversation = resolve_conversation(request.user_id, request.conversation_id, request.message)
@@ -185,12 +201,13 @@ def chat_endpoint(request: ChatRequest):
         if "temporarily unavailable" in error_msg.lower() or "503" in error_msg:
             raise HTTPException(
                 status_code=503,
-                detail="Gemini is temporarily unavailable. Please try again in a moment.",
+                detail="The AI model is temporarily unavailable. Please try again in a moment.",
             ) from err
-        # Never expose raw API keys in error messages
-        if "api_key" in error_msg.lower():
-            error_msg = "LLM service configuration error. Check server logs for details."
-        raise HTTPException(status_code=502, detail=f"Agent execution error: {error_msg}") from err
+        # Details stay in server logs; upstream errors can contain URLs, keys or internals
+        logger.exception("Agent execution failed")
+        raise HTTPException(
+            status_code=502, detail="Something went wrong while generating a response. Please try again."
+        ) from err
 
     return ChatResponse(
         conversation_id=conversation["id"],
@@ -209,35 +226,49 @@ def chat_endpoint(request: ChatRequest):
 
 @router.post("/memory/clear")
 def clear_memory_endpoint(request: ClearMemoryRequest):
-    """Clear conversation history for the specified user."""
-    sql_mgr = get_default_sql_manager()
-    sql_mgr.clear_history(user_id=request.user_id)
-    return {"success": True, "message": f"Conversation history cleared for {request.user_id}."}
+    """Clear conversations, history and long-term semantic memories for the specified user."""
+    get_default_sql_manager().clear_history(user_id=request.user_id)
+    get_default_vector_store().delete_user_memories(user_id=request.user_id)
+    return {"success": True, "message": "Your conversations and memories have been cleared."}
 
 
 # ============================================================================
 # Document / RAG Endpoints
 # ============================================================================
 
-@router.post("/documents/upload")
-async def upload_document(file: UploadFile = File(...)):
-    """Upload and index a PDF document into ChromaDB document RAG collection."""
+@router.post("/documents/upload", dependencies=[Depends(upload_rate_limit)])
+async def upload_document(
+    file: UploadFile = File(...),
+    user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN),
+):
+    """Upload and index a PDF into the user's private document collection."""
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
 
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
-
+    max_bytes = settings.max_upload_mb * 1024 * 1024
+    size = 0
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-        tmp.write(content)
         tmp_path = tmp.name
+        # Stream to disk in chunks so a huge upload can't exhaust memory
+        while chunk := await file.read(UPLOAD_READ_CHUNK):
+            size += len(chunk)
+            if size > max_bytes:
+                break
+            tmp.write(chunk)
 
     try:
+        if size > max_bytes:
+            raise HTTPException(status_code=413, detail=f"PDF is larger than {settings.max_upload_mb} MB.")
+        if size == 0:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+        with open(tmp_path, "rb") as fh:
+            if fh.read(5) != b"%PDF-":
+                raise HTTPException(status_code=400, detail="File is not a valid PDF.")
+
         pipeline = get_default_rag_pipeline()
-        res = pipeline.ingest_pdf(tmp_path)
+        res = pipeline.ingest_pdf(tmp_path, user_id=user_id, document_name=os.path.basename(file.filename))
         if not res.get("success"):
-            raise HTTPException(status_code=500, detail=res.get("error", "PDF ingestion failed."))
+            raise HTTPException(status_code=422, detail=res.get("error", "PDF ingestion failed."))
 
         return {
             "success": True,
@@ -251,12 +282,12 @@ async def upload_document(file: UploadFile = File(...)):
 
 
 @router.get("/documents")
-def get_documents_status():
-    """Retrieve document index statistics."""
+def get_documents_status(user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
+    """Retrieve the user's document index statistics."""
     pipeline = get_default_rag_pipeline()
     return {
         "success": True,
-        "total_chunks": pipeline.count(),
+        "total_chunks": pipeline.count(user_id),
     }
 
 
@@ -281,7 +312,7 @@ def create_reminder(request: ReminderCreateRequest):
 
 @router.get("/reminders")
 def get_reminders(
-    user_id: str = Query(default="default_user"),
+    user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN),
     status: str | None = Query(default=None),
 ):
     """Retrieve all reminders for a user."""
@@ -291,7 +322,7 @@ def get_reminders(
 
 
 @router.patch("/reminders/{reminder_id}/complete")
-def complete_reminder(reminder_id: int, user_id: str = Query(default="default_user")):
+def complete_reminder(reminder_id: int, user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
     """Mark a reminder as completed."""
     mgr = get_reminder_manager()
     updated = mgr.complete_reminder(reminder_id=reminder_id, user_id=user_id)
@@ -301,7 +332,7 @@ def complete_reminder(reminder_id: int, user_id: str = Query(default="default_us
 
 
 @router.delete("/reminders/{reminder_id}")
-def delete_reminder(reminder_id: int, user_id: str = Query(default="default_user")):
+def delete_reminder(reminder_id: int, user_id: str = Query(default="default_user", pattern=USER_ID_PATTERN)):
     """Delete a reminder by ID."""
     mgr = get_reminder_manager()
     deleted = mgr.delete_reminder(reminder_id=reminder_id, user_id=user_id)

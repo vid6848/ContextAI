@@ -1,11 +1,14 @@
 """Weather tool integrating with OpenWeather API."""
 
+import logging
 import re
 from typing import Any
 
 import requests
 
 from src.backend.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def extract_city_from_query(query: str) -> str:
@@ -89,14 +92,17 @@ class WeatherTool:
                     "error": f"City '{city_name}' not found.",
                 }
             else:
+                logger.warning("OpenWeather error %s: %s", response.status_code, response.text[:500])
                 return {
                     "success": False,
-                    "error": f"OpenWeather API error (status {response.status_code}): {response.text}",
+                    "error": f"Weather service returned an error (status {response.status_code}).",
                 }
         except requests.RequestException as err:
+            # Exception text can contain the request URL, including API keys in query params
+            logger.warning("%s request failed: %s", self.__class__.__name__, type(err).__name__)
             return {
                 "success": False,
-                "error": f"Weather network request failed: {err}",
+                "error": "Weather service is unreachable right now.",
             }
 
     def run(self, query: str) -> dict[str, Any]:

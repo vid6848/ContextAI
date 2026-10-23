@@ -7,7 +7,20 @@
 /* ---------------------------------------------------------------- config */
 const BACKEND_URL = (window.CONTEXTAI_BACKEND_URL || "").replace(/\/$/, "");
 const API = `${BACKEND_URL}/api/v1`;
-const USER_ID = "default_user";
+// Anonymous per-browser identity until real sign-in lands (issue #17)
+const USER_ID = (() => {
+  const KEY = "contextai_user_id";
+  try {
+    let id = localStorage.getItem(KEY);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(KEY, id);
+    }
+    return id;
+  } catch (_) {
+    return crypto.randomUUID();
+  }
+})();
 const THEME_STORAGE_KEY = "contextai_accent_theme";
 const SIDEBAR_STORAGE_KEY = "contextai_sidebar_collapsed";
 
@@ -526,7 +539,7 @@ pdfInput.addEventListener("change", () => { pdfBtn.disabled = !pdfInput.files.le
 
 async function refreshDocCount() {
   try {
-    const resp = await fetch(`${API}/documents`);
+    const resp = await fetch(`${API}/documents?${userQuery()}`);
     const data = resp.ok ? await resp.json() : null;
     const count = data ? data.total_chunks ?? 0 : 0;
     $("#doc-chunk-count").textContent = count;
@@ -547,7 +560,7 @@ pdfBtn.addEventListener("click", async () => {
   try {
     const fd = new FormData();
     fd.append("file", file);
-    const resp = await fetch(`${API}/documents/upload`, { method: "POST", body: fd });
+    const resp = await fetch(`${API}/documents/upload?${userQuery()}`, { method: "POST", body: fd });
     const data = await resp.json();
     if (resp.ok && data.success) {
       pdfStatus.className = "modal-status ok";
@@ -576,8 +589,11 @@ $("#clear-memory-btn").addEventListener("click", async () => {
     });
     if (resp.ok) {
       status.className = "modal-status ok";
-      status.textContent = "Your conversation memory has been cleared successfully.";
-      toast("Conversation memory cleared");
+      status.textContent = "Your conversations and memories have been cleared.";
+      toast("Conversations and memories cleared");
+      conversations = {};
+      createConversation();
+      renderAll();
     } else {
       status.className = "modal-status err";
       status.textContent = "Failed to clear conversation memory.";
@@ -623,7 +639,7 @@ function reminderRow(r, done) {
     okBtn.textContent = "✓";
     okBtn.title = "Mark completed";
     okBtn.addEventListener("click", async () => {
-      await fetch(`${API}/reminders/${r.id}/complete?user_id=${USER_ID}`, { method: "PATCH" });
+      await fetch(`${API}/reminders/${r.id}/complete?${userQuery()}`, { method: "PATCH" });
       refreshReminders();
       checkDueReminders();
     });
@@ -633,7 +649,7 @@ function reminderRow(r, done) {
   delBtn.textContent = "🗑";
   delBtn.title = "Delete";
   delBtn.addEventListener("click", async () => {
-    await fetch(`${API}/reminders/${r.id}?user_id=${USER_ID}`, { method: "DELETE" });
+    await fetch(`${API}/reminders/${r.id}?${userQuery()}`, { method: "DELETE" });
     refreshReminders();
     checkDueReminders();
   });

@@ -270,7 +270,7 @@ def build_agent_graph(
         """Retrieve relevant PDF document chunks from ChromaDB."""
         msg = _extract_message(state)
         pipeline = rag_pipeline or get_default_rag_pipeline()
-        chunks = pipeline.retrieve(msg, limit=4)
+        chunks = pipeline.retrieve(msg, limit=4, user_id=state.get("user_id") or "default_user")
         if not chunks:
             return {
                 "tool_name": "document_rag",

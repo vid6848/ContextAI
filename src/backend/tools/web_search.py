@@ -1,10 +1,13 @@
 """Web search tool integrating with Tavily API."""
 
+import logging
 from typing import Any
 
 import requests
 
 from src.backend.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class TavilySearchTool:
@@ -53,14 +56,17 @@ class TavilySearchTool:
                     "results": structured_results,
                 }
             else:
+                logger.warning("Tavily search error %s: %s", response.status_code, response.text[:500])
                 return {
                     "success": False,
-                    "error": f"Tavily search API error (status {response.status_code}): {response.text}",
+                    "error": f"Web search service returned an error (status {response.status_code}).",
                 }
         except requests.RequestException as err:
+            # Exception text can contain the request URL, including API keys in query params
+            logger.warning("%s request failed: %s", self.__class__.__name__, type(err).__name__)
             return {
                 "success": False,
-                "error": f"Web search network request failed: {err}",
+                "error": "Web search service is unreachable right now.",
             }
 
     def run(self, query: str) -> dict[str, Any]:
