@@ -85,9 +85,12 @@ def test_rag_semantic_retrieval_and_metadata(tmp_path):
 
     # Test context formatting
     context_str, sources = rag.format_context(results)
-    assert "[Source: system_guide.pdf, Page:" in context_str
-    assert len(sources) > 0
+    assert "[1] system_guide.pdf, page" in context_str
+    assert len(sources) == len(results)
+    assert [s["n"] for s in sources] == list(range(1, len(results) + 1))
     assert sources[0]["document"] == "system_guide.pdf"
+    assert sources[0]["kind"] == "document"
+    assert sources[0]["excerpt"] == results[0]["content"]
 
 
 def test_rag_no_document_case(tmp_path):
