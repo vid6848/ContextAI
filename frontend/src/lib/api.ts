@@ -18,6 +18,15 @@ export const userId: string = (() => {
   }
 })()
 
+/** The browser's IANA timezone, so "tomorrow at 5pm" means 5pm where the user is. */
+export const timezone: string = (() => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone
+  } catch {
+    return "UTC"
+  }
+})()
+
 export class ApiError extends Error {
   status: number
   constructor(status: number, message: string) {
@@ -78,7 +87,12 @@ export const api = {
 
   listReminders: () => request<{ reminders: Reminder[] }>("/reminders").then((r) => r.reminders),
   createReminder: (reminder_text: string, scheduled_time: string) =>
-    request("/reminders", { method: "POST", body: JSON.stringify({ reminder_text, scheduled_time, user_id: userId }) }),
+    request("/reminders", {
+      method: "POST",
+      body: JSON.stringify({ reminder_text, scheduled_time, timezone, user_id: userId }),
+    }),
+  dueReminders: () => request<{ reminders: Reminder[] }>("/reminders/due").then((r) => r.reminders),
+  markNotified: (id: number) => request(`/reminders/${id}/notified`, { method: "PATCH" }),
   completeReminder: (id: number) => request(`/reminders/${id}/complete`, { method: "PATCH" }),
   deleteReminder: (id: number) => request(`/reminders/${id}`, { method: "DELETE" }),
 }
@@ -124,7 +138,7 @@ export async function* streamChat(req: StreamRequest, signal: AbortSignal): Asyn
   const resp = await fetch(`${API}/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...req, user_id: userId }),
+    body: JSON.stringify({ ...req, user_id: userId, timezone }),
     signal,
   })
   if (!resp.ok || !resp.body) throw new ApiError(resp.status, await errorDetail(resp))

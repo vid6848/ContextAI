@@ -7,12 +7,14 @@ import { BrandBackground } from "@/components/BrandBackground"
 import { Panels } from "@/components/Panels"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
+import { useReminderNotifications } from "@/hooks/useReminderNotifications"
 import { useChat } from "@/store/chat"
 
 const COLLAPSED_KEY = "contextai_sidebar_collapsed"
 
 export function AppLayout() {
   const loadConversations = useChat((s) => s.loadConversations)
+  useReminderNotifications()
   const chatTitle = useChat((s) => s.conversations.find((c) => c.id === s.activeId)?.title)
   const { pathname } = useLocation()
   const title = pathname.startsWith("/c/") ? chatTitle : pathname === "/memory" ? "Memory" : undefined

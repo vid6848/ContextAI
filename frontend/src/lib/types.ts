@@ -108,6 +108,15 @@ export interface Reminder {
   scheduled_time: string
   created_at: string
   status: "pending" | "completed"
+  due_at?: string | null
+  timezone?: string | null
+  notified_at?: string | null
+}
+
+export interface ReminderOutput {
+  id: number
+  text: string
+  due_at: string
 }
 
 /** Server-Sent Events emitted by POST /api/v1/chat/stream. */

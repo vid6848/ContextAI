@@ -1,6 +1,7 @@
-import { Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudRain, CloudSnow, Droplets, Sun, Wind } from "lucide-react"
+import { BellRing, Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudRain, CloudSnow, Droplets, Sun, Wind } from "lucide-react"
 
-import type { CryptoOutput, WeatherOutput } from "@/lib/types"
+import type { CryptoOutput, ReminderOutput, WeatherOutput } from "@/lib/types"
+import { formatWhen } from "@/lib/when"
 import { cn } from "@/lib/utils"
 
 function WeatherIcon({ condition = "", className }: { condition?: string; className?: string }) {
@@ -90,9 +91,28 @@ export function CryptoCard({ data }: { data: CryptoOutput }) {
   )
 }
 
+export function ReminderCard({ data }: { data: ReminderOutput }) {
+  return (
+    <figure
+      className="mb-4 flex items-center gap-4 rounded-2xl border bg-card/85 px-5 py-4 shadow-[0_18px_40px_-26px_rgb(30_20_90/0.4)] backdrop-blur-xl"
+      aria-label={`Reminder: ${data.text}`}
+    >
+      <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand/12 text-brand">
+        <BellRing className="size-5" />
+      </span>
+      <div className="min-w-0">
+        <figcaption className="text-sm text-muted-foreground">Reminder set</figcaption>
+        <p className="truncate font-display text-[1.25rem] font-semibold">{data.text}</p>
+        <p className="text-[0.95rem] text-foreground/80">{formatWhen(data.due_at)}</p>
+      </div>
+    </figure>
+  )
+}
+
 export function ToolCard({ tool, output }: { tool?: string | null; output?: Record<string, unknown> | null }) {
   if (!output) return null
   if (tool === "weather") return <WeatherCard data={output as unknown as WeatherOutput} />
   if (tool === "crypto") return <CryptoCard data={output as unknown as CryptoOutput} />
+  if (tool === "reminder") return <ReminderCard data={output as unknown as ReminderOutput} />
   return null
 }

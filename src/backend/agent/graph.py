@@ -4,7 +4,7 @@ import json
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import date
+from datetime import datetime
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
@@ -19,6 +19,8 @@ from src.backend.llm.client import LLMClient
 from src.backend.memory.sql_db import SQLiteManager
 from src.backend.memory.vector_store import ChromaMemoryStore
 from src.backend.rag.pipeline import DocumentRAGPipeline
+from src.backend.reminders.reminder_manager import ReminderManager
+from src.backend.reminders.timeparse import resolve_timezone
 from src.backend.tools.calculator import CalculatorTool
 from src.backend.tools.crypto import CryptoTool
 from src.backend.tools.weather import WeatherTool
@@ -34,6 +36,7 @@ _default_weather_tool: WeatherTool | None = None
 _default_crypto_tool: CryptoTool | None = None
 _default_tavily_tool: TavilySearchTool | None = None
 _default_rag_pipeline: DocumentRAGPipeline | None = None
+_default_reminder_manager: ReminderManager | None = None
 
 
 def get_default_classifier() -> IntentClassifier:
@@ -107,6 +110,14 @@ def get_default_rag_pipeline() -> DocumentRAGPipeline:
     if _default_rag_pipeline is None:
         _default_rag_pipeline = DocumentRAGPipeline()
     return _default_rag_pipeline
+
+
+def get_default_reminder_manager() -> ReminderManager:
+    """Get or initialize singleton instance of ReminderManager."""
+    global _default_reminder_manager
+    if _default_reminder_manager is None:
+        _default_reminder_manager = ReminderManager()
+    return _default_reminder_manager
 
 
 def is_user_specific_memory(message: str) -> bool:
@@ -223,9 +234,9 @@ def choose_route(confidence: float) -> str:
 
 
 AGENT_SYSTEM_PROMPT = (
-    "You are ContextAI, a helpful personal assistant. Today is {today}.\n"
-    "You can call tools: a calculator, current weather, live crypto prices, web search, and a search over "
-    "the PDFs the user uploaded. Call a tool whenever the answer depends on live data, exact arithmetic, "
+    "You are ContextAI, a helpful personal assistant. It is now {now} in the user's timezone ({tz}).\n"
+    "You can call tools: a calculator, current weather, live crypto prices, web search, reminders, and a "
+    "search over the PDFs the user uploaded. Call a tool whenever the answer depends on live data, exact arithmetic, "
     "recent facts or the user's documents. When a question has several parts, call several tools at once. "
     "Never invent tool results; if a tool fails, say so briefly and answer what you can.\n"
     "Search results can be out of date: compare any dates you find with today's date, treat earlier dates as "
@@ -236,7 +247,9 @@ AGENT_SYSTEM_PROMPT = (
 
 def build_chat_messages(state: AgentState) -> list[dict[str, Any]]:
     """System prompt (with long-term memories), prior turns as real chat messages, then the new message."""
-    system = AGENT_SYSTEM_PROMPT.format(today=date.today().isoformat(), citations=CITATION_RULES)
+    tz = resolve_timezone(state.get("timezone"))
+    now = datetime.now(tz).strftime("%A %d %B %Y, %H:%M")
+    system = AGENT_SYSTEM_PROMPT.format(now=now, tz=tz.key, citations=CITATION_RULES)
     memories = state.get("semantic_memories") or []
     if memories:
         system += "\n\nThings the user told you before (use them when relevant):\n" + "\n".join(
@@ -477,7 +490,9 @@ def build_agent_graph(
             crypto=crypto_tool or get_default_crypto_tool(),
             web=tavily_tool or get_default_tavily_tool(),
             rag=rag_pipeline or get_default_rag_pipeline(),
+            reminders=get_default_reminder_manager(),
             user_id=state.get("user_id") or "default_user",
+            timezone=state.get("timezone"),
         )
         messages = build_chat_messages(state)
         steps: list[dict[str, Any]] = []
