@@ -10,8 +10,10 @@ const PROMPTS = [
 
 export function EmptyState({ onPick }: { onPick: (text: string) => void }) {
   return (
-    <div className="mx-auto flex w-full max-w-[720px] flex-1 flex-col justify-center px-4 pb-8">
-      <h1 className="text-[28px] font-medium tracking-[-0.015em]">What can I help with?</h1>
+    <div className="mx-auto flex w-full max-w-[var(--content-width)] flex-1 flex-col justify-center px-4 pb-8">
+      <h1 className="font-display text-[clamp(2.25rem,3.4vw,3.25rem)] leading-tight font-semibold tracking-[-0.03em]">
+        What can I help with?
+      </h1>
       <p className="mt-2 max-w-[52ch] text-muted-foreground">
         ContextAI remembers what you tell it, checks live data, and reads your PDFs. Every answer shows the steps it
         took.
@@ -22,7 +24,7 @@ export function EmptyState({ onPick }: { onPick: (text: string) => void }) {
             <button
               type="button"
               onClick={() => onPick(p.text)}
-              className="flex w-full items-center gap-3 py-3 text-left text-[15px] text-foreground/85 transition-colors hover:text-foreground"
+              className="flex w-full items-center gap-3 py-3 text-left text-[0.9375rem] text-foreground/85 transition-colors hover:text-foreground"
             >
               <span className={cn("size-2 shrink-0 rounded-full", p.dot)} aria-hidden />
               {p.text}

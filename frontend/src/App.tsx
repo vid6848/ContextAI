@@ -1,6 +1,6 @@
 import { Menu, PanelLeftOpen, SquarePen } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
-import { Outlet, useLocation, useNavigate } from "react-router"
+import { Outlet, useNavigate } from "react-router"
 
 import { AppSidebar, type Panel } from "@/components/AppSidebar"
 import { Panels } from "@/components/Panels"
@@ -28,20 +28,6 @@ export function AppLayout() {
     void loadConversations()
   }, [loadConversations])
 
-  // First visit with no chats: show the landing page once
-  const location = useLocation()
-  const conversationsLoaded = useChat((s) => s.conversationsLoaded)
-  const hasChats = useChat((s) => s.conversations.length > 0)
-  useEffect(() => {
-    if (!conversationsLoaded || hasChats || location.pathname !== "/") return
-    let welcomed = true
-    try {
-      welcomed = localStorage.getItem("contextai_welcomed") === "1"
-    } catch {
-      /* storage unavailable: skip the landing page */
-    }
-    if (!welcomed) navigate("/welcome", { replace: true })
-  }, [conversationsLoaded, hasChats, location.pathname, navigate])
 
 
   const setCollapsedPersist = (value: boolean) => {
@@ -66,7 +52,7 @@ export function AppLayout() {
         setTimeout(() => searchRef.current?.focus(), 50)
       } else if (key === "o" && e.shiftKey) {
         e.preventDefault()
-        navigate("/")
+        navigate("/chat")
       } else if (key === "/") {
         e.preventDefault()
         setPanel("shortcuts")
@@ -90,13 +76,13 @@ export function AppLayout() {
         Skip to message box
       </a>
       {!collapsed && (
-        <aside className="hidden w-[260px] shrink-0 border-r border-sidebar-border md:block">
+        <aside className="hidden w-[17rem] shrink-0 border-r border-sidebar-border md:block">
           <AppSidebar onCollapse={() => setCollapsedPersist(true)} onOpenPanel={openPanel} searchRef={searchRef} />
         </aside>
       )}
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="w-[280px] p-0" showCloseButton={false}>
+        <SheetContent side="left" className="w-[18rem] p-0" showCloseButton={false}>
           <SheetTitle className="sr-only">Chats</SheetTitle>
           <AppSidebar onNavigate={() => setMobileOpen(false)} onOpenPanel={openPanel} searchRef={searchRef} />
         </SheetContent>
@@ -105,7 +91,7 @@ export function AppLayout() {
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-12 shrink-0 items-center gap-1 px-2">
           <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobileOpen(true)} aria-label="Open sidebar">
-            <Menu className="size-[18px]" />
+            <Menu className="size-[1.125rem]" />
           </Button>
           {collapsed && (
             <>
@@ -116,16 +102,16 @@ export function AppLayout() {
                 onClick={() => setCollapsedPersist(false)}
                 aria-label="Open sidebar"
               >
-                <PanelLeftOpen className="size-[18px]" />
+                <PanelLeftOpen className="size-[1.125rem]" />
               </Button>
-              <Button variant="ghost" size="icon" className="hidden md:inline-flex" onClick={() => navigate("/")} aria-label="New chat">
-                <SquarePen className="size-[18px]" />
+              <Button variant="ghost" size="icon" className="hidden md:inline-flex" onClick={() => navigate("/chat")} aria-label="New chat">
+                <SquarePen className="size-[1.125rem]" />
               </Button>
             </>
           )}
-          <h1 className="truncate px-2 text-[14px] font-medium text-foreground/80">{title ?? ""}</h1>
-          <Button variant="ghost" size="icon" className="ml-auto md:hidden" onClick={() => navigate("/")} aria-label="New chat">
-            <SquarePen className="size-[18px]" />
+          <h1 className="truncate px-2 text-[0.9rem] font-medium text-foreground/80">{title ?? ""}</h1>
+          <Button variant="ghost" size="icon" className="ml-auto md:hidden" onClick={() => navigate("/chat")} aria-label="New chat">
+            <SquarePen className="size-[1.125rem]" />
           </Button>
         </header>
         <Outlet />

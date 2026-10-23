@@ -60,13 +60,13 @@ export function AppSidebar({ onNavigate, onCollapse, onOpenPanel, searchRef }: A
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex items-center justify-between px-3 pt-3 pb-2">
-        <NavLink to="/" onClick={onNavigate} className="flex items-center gap-2 rounded-md px-1.5 py-1">
-          <Logo className="size-[22px]" />
-          <span className="text-[15px] font-semibold tracking-[-0.01em]">ContextAI</span>
+        <NavLink to="/" onClick={onNavigate} title="ContextAI home" className="flex items-center gap-2 rounded-md px-1.5 py-1">
+          <Logo className="size-[1.375rem]" />
+          <span className="font-display text-[1.1rem] font-semibold tracking-[-0.02em]">ContextAI</span>
         </NavLink>
         {onCollapse && (
           <Button variant="ghost" size="icon" onClick={onCollapse} aria-label="Close sidebar" className="text-muted-foreground">
-            <PanelLeftClose className="size-[18px]" />
+            <PanelLeftClose className="size-[1.125rem]" />
           </Button>
         )}
       </div>
@@ -74,9 +74,9 @@ export function AppSidebar({ onNavigate, onCollapse, onOpenPanel, searchRef }: A
       <div className="space-y-1 px-2">
         <Button
           variant="ghost"
-          className="h-9 w-full justify-start gap-2.5 px-2.5 text-[14px] font-normal"
+          className="h-9 w-full justify-start gap-2.5 px-2.5 text-[0.9rem] font-normal"
           onClick={() => {
-            navigate("/")
+            navigate("/chat")
             onNavigate?.()
           }}
         >
@@ -92,20 +92,20 @@ export function AppSidebar({ onNavigate, onCollapse, onOpenPanel, searchRef }: A
             onChange={(e) => setQuery(e.target.value)}
             placeholder={`Search chats  ${MOD}K`}
             aria-label="Search chats"
-            className="h-9 w-full rounded-md bg-transparent pr-2 pl-[34px] text-[14px] outline-none placeholder:text-muted-foreground hover:bg-sidebar-accent focus:bg-sidebar-accent"
+            className="h-9 w-full rounded-md bg-transparent pr-2 pl-[34px] text-[0.9rem] outline-none placeholder:text-muted-foreground hover:bg-sidebar-accent focus:bg-sidebar-accent"
           />
         </div>
       </div>
 
       <nav className="mt-3 flex-1 overflow-y-auto px-2 pb-2" aria-label="Conversations">
         {loaded && !groups.length && (
-          <p className="px-2.5 py-2 text-[13px] text-muted-foreground">
+          <p className="px-2.5 py-2 text-[0.8125rem] text-muted-foreground">
             {query ? "No chats match that search." : "Your chats will appear here."}
           </p>
         )}
         {groups.map((g) => (
           <section key={g.label} className="mb-4">
-            <h2 className="px-2.5 pb-1 text-[12px] font-medium text-muted-foreground">{g.label}</h2>
+            <h2 className="px-2.5 pb-1 text-[0.75rem] font-medium text-muted-foreground">{g.label}</h2>
             <ul>
               {g.items.map((c) => (
                 <ConversationRow key={c.id} conversation={c} onNavigate={onNavigate} />
@@ -158,7 +158,7 @@ function ConversationRow({ conversation, onNavigate }: { conversation: Conversat
             }
           }}
           aria-label="Chat title"
-          className="h-8 w-full rounded-md border border-ring/50 bg-background px-2.5 text-[14px] outline-none"
+          className="h-8 w-full rounded-md border border-ring/50 bg-background px-2.5 text-[0.9rem] outline-none"
         />
       </li>
     )
@@ -171,7 +171,7 @@ function ConversationRow({ conversation, onNavigate }: { conversation: Conversat
         onClick={onNavigate}
         className={({ isActive }) =>
           cn(
-            "block truncate rounded-md py-1.5 pr-8 pl-2.5 text-[14px] text-sidebar-foreground/85 hover:bg-sidebar-accent",
+            "block truncate rounded-md py-1.5 pr-8 pl-2.5 text-[0.9rem] text-sidebar-foreground/85 hover:bg-sidebar-accent",
             isActive && "bg-sidebar-accent font-medium text-sidebar-foreground",
           )
         }
@@ -198,7 +198,7 @@ function ConversationRow({ conversation, onNavigate }: { conversation: Conversat
             onSelect={async () => {
               try {
                 await remove(conversation.id)
-                if (activeId === conversation.id) navigate("/")
+                if (activeId === conversation.id) navigate("/chat")
                 toast("Chat deleted")
               } catch {
                 toast.error("Couldn't delete the chat.")
@@ -219,7 +219,7 @@ function AccountMenu({ onOpenPanel }: { onOpenPanel: (panel: Panel) => void }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="h-10 w-full justify-start gap-2.5 px-2 text-[14px] font-normal">
+        <Button variant="ghost" className="h-10 w-full justify-start gap-2.5 px-2 text-[0.9rem] font-normal">
           <span className="flex size-7 items-center justify-center rounded-full bg-sidebar-accent">
             <UserRound className="size-4" />
           </span>
@@ -237,7 +237,7 @@ function AccountMenu({ onOpenPanel }: { onOpenPanel: (panel: Panel) => void }) {
           <Keyboard /> Keyboard shortcuts
           <DropdownMenuShortcut>{MOD}/</DropdownMenuShortcut>
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => navigate("/welcome")}>
+        <DropdownMenuItem onSelect={() => navigate("/")}>
           <Info /> About ContextAI
         </DropdownMenuItem>
         <DropdownMenuSeparator />
