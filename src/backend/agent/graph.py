@@ -443,7 +443,7 @@ def build_agent_graph(
             step["label"] = (
                 f"Found {len(chunks)} relevant {'passage' if len(chunks) == 1 else 'passages'}"
                 if chunks
-                else "No matching documents found"
+                else "No relevant passages in your documents"
             )
             step["detail"] = {"input": msg, "sources": sources}
         if not chunks:
@@ -558,8 +558,13 @@ def build_agent_graph(
         if intent.upper() == "DOCUMENT":
             doc_chunks = state.get("document_chunks")
             if not doc_chunks:
+                pipeline = rag_pipeline or get_default_rag_pipeline()
+                has_docs = pipeline.count(state.get("user_id") or "default_user") > 0
                 no_doc_msg = (
-                    "No documents have been indexed yet. "
+                    "I couldn't find anything about that in your documents. "
+                    "Try rephrasing, or ask about something they cover."
+                    if has_docs
+                    else "No documents have been indexed yet. "
                     "Please ingest a PDF document first so I can answer questions from it."
                 )
                 get_stream_writer()({"type": "token", "text": no_doc_msg})

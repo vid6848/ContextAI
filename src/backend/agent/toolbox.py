@@ -138,12 +138,20 @@ class ToolBox:
     def _search_documents(self, query: str) -> dict[str, Any]:
         chunks = self.rag.retrieve(query, limit=4, user_id=self.user_id)
         if not chunks:
-            return {"success": True, "query": query, "passages": [], "note": "The user has no matching documents."}
+            note = (
+                "None of the user's documents mention this. Tell them it isn't in their documents; don't guess."
+                if self.rag.count(self.user_id)
+                else "The user hasn't uploaded any documents yet."
+            )
+            return {"success": True, "query": query, "passages": [], "note": note}
         passages = []
         for c in chunks:
             n = len(self.sources) + 1
             doc, page, text = c.get("document_name", "Document"), c.get("page_number", 1), c.get("content", "")
-            self.sources.append({"n": n, "kind": "document", "document": doc, "page": page, "excerpt": text})
+            source = {"n": n, "kind": "document", "document": doc, "page": page, "excerpt": text}
+            if c.get("section"):
+                source["section"] = c["section"]
+            self.sources.append(source)
             passages.append({"n": n, "document": doc, "page": page, "text": text})
         return {"success": True, "query": query, "passages": passages}
 
