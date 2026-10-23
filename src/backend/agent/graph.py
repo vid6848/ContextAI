@@ -144,6 +144,23 @@ TOOL_DISPLAY = {
     "web_search": ("Searching the web", "Tavily web search"),
 }
 MAX_STEP_DETAIL_CHARS = 4000
+# Tools whose structured result the UI renders as a card under the answer
+CARD_TOOLS = {"weather", "crypto"}
+CITATION_RULES = (
+    "Cite each claim with the source number in square brackets right after it, like [1] or [2][3]. "
+    "Don't write document names, page numbers or URLs in the text; the app shows them next to the citations. "
+    "If the sources don't contain the answer, say so instead of guessing."
+)
+
+
+def web_sources(result: dict[str, Any]) -> list[dict[str, Any]]:
+    """Turn web search results into numbered citation sources."""
+    return [
+        {"n": n, "kind": "web", "title": r.get("title") or r.get("url", ""), "url": r.get("url", ""),
+         "excerpt": (r.get("content") or "")[:600]}
+        for n, r in enumerate(result.get("results") or [], start=1)
+        if r.get("url")
+    ]
 
 
 def _compact(value: Any) -> Any:
@@ -175,6 +192,14 @@ def agent_step(step_id: str, label: str) -> Iterator[dict[str, Any]]:
     finally:
         step["duration_ms"] = round((time.perf_counter() - started) * 1000)
         writer({"type": "step", **step})
+
+
+def tool_card(state: AgentState) -> dict[str, Any] | None:
+    """Structured tool result for the UI card, when the tool has one and succeeded."""
+    result = state.get("tool_result") or {}
+    if state.get("tool_name") in CARD_TOOLS and result.get("success"):
+        return result
+    return None
 
 
 def _extract_message(state: AgentState) -> str:
@@ -330,8 +355,11 @@ def build_agent_graph(
         return run_tool("crypto", crypto_tool or get_default_crypto_tool(), _extract_message(state))
 
     def web_search_node(state: AgentState) -> dict:
-        """Execute web search tool."""
-        return run_tool("web_search", tavily_tool or get_default_tavily_tool(), _extract_message(state))
+        """Execute web search tool; its results become numbered citation sources."""
+        update = run_tool("web_search", tavily_tool or get_default_tavily_tool(), _extract_message(state))
+        if update["tool_result"].get("success"):
+            update["rag_sources"] = web_sources(update["tool_result"])
+        return update
 
     def document_rag_node(state: AgentState) -> dict:
         """Retrieve relevant PDF document chunks from ChromaDB."""
@@ -392,15 +420,22 @@ def build_agent_graph(
             pipeline = rag_pipeline or get_default_rag_pipeline()
             rag_text, _ = pipeline.format_context(state["document_chunks"])
             context_sections.append(
-                f"Retrieved Document Content:\n{rag_text}\n"
-                "Answer the user's question using the retrieved document content above. "
-                "Include document name and page number citations in your answer."
+                f"Numbered passages from the user's documents:\n{rag_text}\n"
+                f"Answer the user's question from these passages. {CITATION_RULES}"
             )
 
         # 2. Tool Execution Result
         tool_name = state.get("tool_name")
         tool_res = state.get("tool_result")
-        if tool_name and tool_res:
+        if tool_name == "web_search" and state.get("rag_sources"):
+            results_text = "\n\n".join(
+                f"[{s['n']}] {s['title']} ({s['url']})\n{s['excerpt']}" for s in state["rag_sources"]
+            )
+            context_sections.append(
+                f"Numbered web search results:\n{results_text}\n"
+                f"Answer the user's question from these results. {CITATION_RULES}"
+            )
+        elif tool_name and tool_res and tool_name != "document_rag":
             context_sections.append(
                 f"Tool Execution Result ({tool_name}):\n{tool_res}\n"
                 "Use the tool result above to provide an accurate, helpful, and natural-language answer to the user."
@@ -484,6 +519,7 @@ def build_agent_graph(
                     "confidence": state.get("confidence"),
                     "tool_used": state.get("tool_name"),
                     "sources": state.get("rag_sources"),
+                    "tool_output": tool_card(state),
                     "steps": state.get("steps") or [],
                     "stopped": bool(state.get("stopped")),
                 },

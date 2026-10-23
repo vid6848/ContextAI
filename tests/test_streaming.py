@@ -304,3 +304,28 @@ def test_attachments_route_to_and_scope_document_search(mock_stream):
 def test_attachment_list_is_validated():
     resp = client.post("/api/v1/chat", json={"message": "hi", "attachments": [f"f{i}.pdf" for i in range(6)]})
     assert resp.status_code == 422
+
+
+@patch("src.backend.tools.crypto.CryptoTool.run")
+@patch("src.backend.llm.client.LLMClient.stream_response")
+def test_card_tools_send_and_store_their_output(mock_stream, mock_crypto):
+    output = {"success": True, "coin": "bitcoin", "price_usd": 81000, "change_24h_percent": -0.2}
+    mock_crypto.return_value = output
+    mock_stream.return_value = iter(["BTC is $81,000."])
+
+    events = _stream({"message": "What is the price of bitcoin?", "user_id": "card"})
+    done = next(d for n, d in events if n == "done")
+    assert done["tool_output"] == output
+
+    cid = events[0][1]["conversation_id"]
+    saved = client.get(f"/api/v1/conversations/{cid}/messages", params={"user_id": "card"}).json()["messages"]
+    assert saved[1]["metadata"]["tool_output"] == output
+
+
+@patch("src.backend.tools.crypto.CryptoTool.run")
+@patch("src.backend.llm.client.LLMClient.stream_response")
+def test_failed_card_tool_has_no_card(mock_stream, mock_crypto):
+    mock_crypto.return_value = {"success": False, "error": "down"}
+    mock_stream.return_value = iter(["Sorry."])
+    events = _stream({"message": "What is the price of bitcoin?", "user_id": "card2"})
+    assert next(d for n, d in events if n == "done")["tool_output"] is None
