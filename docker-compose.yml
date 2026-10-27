@@ -1,0 +1,16 @@
+# Run the production image locally: docker compose up, then open http://localhost:8000
+# Reads your .env (copy .env.example and add GEMINI_API_KEY). Without DATABASE_URL, chats, memories and
+# documents are kept in ./data (SQLite + ChromaDB), which survives restarts.
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
