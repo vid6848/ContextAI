@@ -37,7 +37,7 @@ def _lean_minilm() -> Any:
             path = os.path.join(self.DOWNLOAD_PATH, self.EXTRACTED_FOLDER_NAME, "model.onnx")
             return self.ort.InferenceSession(path, sess_options=options, providers=["CPUExecutionProvider"])
 
-        def _forward(self, documents: list[str], batch_size: int = 16) -> np.ndarray:
+        def _forward(self, documents: list[str], batch_size: int = 8) -> np.ndarray:
             vectors = []
             for i in range(0, len(documents), batch_size):
                 encoded = self.tokenizer.encode_batch(documents[i : i + batch_size])

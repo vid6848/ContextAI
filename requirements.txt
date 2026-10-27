@@ -31,6 +31,3 @@ pywebpush==2.5.0
 
 # Tracing (agent steps, tool calls, tokens, cost, feedback scores); off without keys
 langfuse==5.0.4
-
-# Intent classification
-scikit-learn==1.9.1

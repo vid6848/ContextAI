@@ -124,3 +124,27 @@ def test_classifier_invalid_training_data():
 
     with pytest.raises(ValueError, match="empty"):
         classifier.train(texts=[], labels=[])
+
+
+def test_shipped_model_is_up_to_date_and_matches_scikit_learn():
+    """intent_model.json must come from the current training data, and the numpy path must predict exactly
+    what scikit-learn does. If this fails after editing the data, run: python -m scripts.export_intent_model"""
+    import numpy as np
+
+    from evals.run import load
+    from src.backend.classifier.intent_classifier import IntentClassifier, get_default_training_data
+
+    fresh = IntentClassifier()
+    fresh.train()
+    shipped = IntentClassifier.load()
+    assert shipped.params["vocabulary"] == fresh.params["vocabulary"]
+    assert np.allclose(shipped.params["coef"], fresh.params["coef"], atol=1e-6)
+
+    vectorizer, model = fresh._models()
+    texts, labels = get_default_training_data()
+    model.fit(vectorizer.fit_transform(texts), labels)
+    for text in texts + [row["text"] for row in load("intent_eval.jsonl")]:
+        x = vectorizer.transform([text])
+        ours = shipped.predict(text)
+        assert ours.intent == model.predict(x)[0], text
+        assert abs(ours.confidence - model.predict_proba(x)[0].max()) < 1e-6, text

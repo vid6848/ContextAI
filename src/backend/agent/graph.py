@@ -45,8 +45,8 @@ def get_default_classifier() -> IntentClassifier:
     """Get or initialize singleton instance of IntentClassifier."""
     global _default_classifier
     if _default_classifier is None:
-        _default_classifier = IntentClassifier()
-        _default_classifier.train()
+        # Trained weights ship with the code, so the server doesn't need scikit-learn
+        _default_classifier = IntentClassifier.load()
     return _default_classifier
 
 
