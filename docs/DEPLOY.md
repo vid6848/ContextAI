@@ -1,8 +1,8 @@
 # Deploying ContextAI
 
 ContextAI ships as one Docker image: a Node stage builds the React app and the Python stage serves it
-together with the API. Any host that runs a Dockerfile works. The free path below is **Hugging Face
-Spaces** (2 vCPU, 16 GB RAM) with data in **Supabase**, so nothing is lost when the container restarts.
+together with the API. Any host that runs a Dockerfile works. The free path below is **Render** (free web
+service, 512 MB RAM) with data in **Supabase**, so nothing is lost when the container restarts.
 
 ## 1. Database and sign-in (Supabase)
 
@@ -17,14 +17,9 @@ Spaces** (2 vCPU, 16 GB RAM) with data in **Supabase**, so nothing is lost when 
    Never use the **secret** key (`sb_secret_…`); ContextAI doesn't need it.
 3. Tables are created automatically on the first start (`src/backend/db/schema.sql`). Row-level security
    is on with no policies, so Supabase's public API can't read them; only the server's connection can.
-4. Sign-in:
-   - **Email links** work out of the box.
-   - **Google**: in Google Cloud Console create an OAuth client (type *Web application*) with the redirect
-     URI `https://<project-ref>.supabase.co/auth/v1/callback`, then enable Google under
-     Authentication → Sign In / Providers and paste the client ID and secret.
-   - Authentication → URL Configuration: set **Site URL** to your app's URL and add
-     `<your app URL>/**` (plus `http://localhost:8000/**` and `http://localhost:5173/**` for local use)
-     to **Redirect URLs**.
+4. Sign-in uses **email links**, which work out of the box. Under Authentication → URL Configuration,
+   set **Site URL** to your app's URL and add `<your app URL>/**` (plus `http://localhost:8000/**` and `http://localhost:5173/**` for local use)
+   to **Redirect URLs**.
 
 ## 2. Push notification keys
 
@@ -35,13 +30,13 @@ python -m scripts.generate_vapid_keys
 Save the two printed lines as secrets. Without fixed keys, each new container generates its own and
 browsers that subscribed earlier stop receiving reminders.
 
-## 3. Hugging Face Space
+## 3. Render
 
-1. Create a [Hugging Face](https://huggingface.co) account, then **New Space**: SDK **Docker**,
-   template **Blank**, hardware **CPU basic (free)**. Name it e.g. `contextai`.
-2. In the Space's **Settings → Variables and secrets**, add as **secrets**:
+1. Sign up at [render.com](https://render.com) with GitHub, then **New → Web Service** and pick this repo.
+   Runtime **Docker**, instance type **Free**.
+2. Under **Environment**, add:
 
-   | Secret | Notes |
+   | Variable | Notes |
    |---|---|
    | `GEMINI_API_KEY` | required |
    | `DATABASE_URL` | from step 1 |
@@ -50,22 +45,17 @@ browsers that subscribed earlier stop receiving reminders.
    | `VAPID_CONTACT` | `mailto:you@example.com` |
    | `OPENWEATHER_API_KEY`, `TAVILY_API_KEY` | optional tools |
 
-3. Create a Hugging Face **access token** with *write* permission (Settings → Access Tokens).
-4. In the GitHub repo, **Settings → Secrets and variables → Actions**:
-   - secret `HF_TOKEN` = that token
-   - variable `HF_SPACE` = `<your-hf-username>/contextai`
-5. Push to `main` (or run the *Deploy to Hugging Face Spaces* workflow by hand). After CI passes, the
-   workflow pushes a snapshot of the repo to the Space, which builds the image (about 10 minutes the
-   first time) and serves it at `https://<your-hf-username>-contextai.hf.space`.
-6. Add that URL to Supabase's Site URL / Redirect URLs (step 1.4).
+3. Set **Health Check Path** to `/health` and deploy. Render builds the image and serves it at
+   `https://<service-name>.onrender.com`, then redeploys on every push to `main`.
+4. Add that URL to Supabase's Site URL / Redirect URLs (step 1.4).
 
-Free Spaces sleep after about 48 hours without visitors and wake on the next request (about a minute).
+Free services sleep after about 15 minutes without visitors and wake on the next request (about a minute).
 
 ## Other hosts
 
 - **Railway**: `railway.json` builds the Dockerfile and health-checks `/health`. Set the same environment
   variables. With `DATABASE_URL` set no volume is needed.
-- **Anything else** (Render, Fly.io, Cloud Run, a VM): build the Dockerfile, expose port 8000 (or set
+- **Anything else** (Hugging Face Spaces, Fly.io, Cloud Run, a VM): build the Dockerfile, expose port 8000 (or set
   `PORT`), and set the environment variables above.
 
 ## Checking a deployment

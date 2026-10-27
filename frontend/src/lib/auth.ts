@@ -16,7 +16,6 @@ interface AuthState {
   enabled: boolean
   required: boolean
   session: Session | null
-  signInWithGoogle: () => Promise<void>
   sendMagicLink: (email: string) => Promise<void>
   signOut: () => Promise<void>
 }
@@ -54,11 +53,6 @@ export const useAuth = create<AuthState>((set) => ({
   enabled: false,
   required: false,
   session: null,
-  async signInWithGoogle() {
-    if (!client) return
-    const { error } = await client.auth.signInWithOAuth({ provider: "google", options: { redirectTo: redirectTo() } })
-    if (error) throw error
-  },
   async sendMagicLink(email: string) {
     if (!client) return
     const { error } = await client.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo() } })

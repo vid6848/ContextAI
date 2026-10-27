@@ -53,9 +53,9 @@ Every node runs inside a timed `agent_step` that streams `running → done/error
 | Agent | LangGraph, Gemini function calling with multi-tool chaining, TF-IDF + Logistic Regression fast path | |
 | LLM | Gemini via LiteLLM (swap providers with one env var) | |
 | Data | SQLite + ChromaDB, heading-aware PDF chunking, hybrid re-ranking, dateparser | Supabase Postgres + pgvector ([#18](https://github.com/vid6848/ContextAI/issues/18)) |
-| Auth | Anonymous per-browser id | Supabase Auth with Google ([#17](https://github.com/vid6848/ContextAI/issues/17)) |
+| Auth | Anonymous per-browser id | Supabase Auth with email links ([#17](https://github.com/vid6848/ContextAI/issues/17)) |
 | Quality | pytest (148), Vitest (18), ruff, oxlint, GitHub Actions | Eval suite ([#20](https://github.com/vid6848/ContextAI/issues/20)), Langfuse ([#21](https://github.com/vid6848/ContextAI/issues/21)) |
-| Hosting | Docker (multi-stage), Railway config | Hugging Face Spaces ([#19](https://github.com/vid6848/ContextAI/issues/19)) |
+| Hosting | Docker (multi-stage), Railway config | Render ([#19](https://github.com/vid6848/ContextAI/issues/19)) |
 
 ---
 
@@ -84,9 +84,9 @@ Tracked with [milestones](https://github.com/vid6848/ContextAI/milestones) and [
 - [x] [#16](https://github.com/vid6848/ContextAI/issues/16) Natural-language reminders with notifications
 
 ### Phase 4: Accounts, persistence & deploy
-- [ ] [#17](https://github.com/vid6848/ContextAI/issues/17) Supabase Auth (Google) + guest mode
+- [ ] [#17](https://github.com/vid6848/ContextAI/issues/17) Supabase Auth (email links) + guest mode
 - [ ] [#18](https://github.com/vid6848/ContextAI/issues/18) Supabase Postgres + pgvector persistence
-- [ ] [#19](https://github.com/vid6848/ContextAI/issues/19) Deploy to Hugging Face Spaces
+- [ ] [#19](https://github.com/vid6848/ContextAI/issues/19) Deploy (Render)
 
 ### Phase 5: Evals, observability & showcase
 - [ ] [#20](https://github.com/vid6848/ContextAI/issues/20) Automated evaluation suite in CI
@@ -150,6 +150,5 @@ cd frontend && npm run lint && npm run typecheck && npm test     # frontend
 
 ## ☁️ Deployment
 
-One Docker image serves the API and the React app. The free setup is **Hugging Face Spaces** for hosting
-and **Supabase** for the database (Postgres + pgvector) and sign-in; a GitHub Action deploys every
-green commit on `main`. Step-by-step guide: **[docs/DEPLOY.md](docs/DEPLOY.md)**.
+One Docker image serves the API and the React app. The free setup is **Render** for hosting and
+**Supabase** for the database (Postgres + pgvector) and sign-in; Render redeploys every push to `main`. Step-by-step guide: **[docs/DEPLOY.md](docs/DEPLOY.md)**.
