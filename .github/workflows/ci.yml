@@ -104,6 +104,16 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
+    services:
+      # The container runs against Postgres + pgvector, like production on Supabase
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: contextai
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -118,7 +128,8 @@ jobs:
       - name: Smoke test the container
         run: |
           # Same memory as Render's free instance, so anything that would get killed there fails here
-          docker run -d --name app --memory=512m --memory-swap=512m -p 8000:8000 contextai:ci
+          docker run -d --name app --memory=512m --memory-swap=512m --network host \
+            -e DATABASE_URL=postgresql://postgres:postgres@localhost:5432/contextai contextai:ci
           for i in $(seq 1 60); do curl -sf localhost:8000/health && break; sleep 2; done
           curl -sf localhost:8000/health
           curl -sf localhost:8000/ | grep -q '<div id="root">'
@@ -140,6 +151,30 @@ jobs:
           docker inspect app --format 'running={{.State.Running}} oom_killed={{.State.OOMKilled}} exit={{.State.ExitCode}}' \
             | tee -a "$GITHUB_STEP_SUMMARY"
           [ "$code" = 200 ] && grep -q '"total_chunks":10' upload.json
+      - name: Memory by upload stage (diagnostic)
+        if: always()
+        run: |
+          docker run --rm --network host -v "$PWD/tests/fixtures:/fixture:ro" \
+            -e DATABASE_URL=postgresql://postgres:postgres@localhost:5432/contextai contextai:ci python -c '
+          import gc
+          def mb(label):
+              gc.collect()
+              status = dict(line.split(":", 1) for line in open("/proc/self/status"))
+              print(f"{label:24} now {status[\"VmRSS\"].strip():>12}  peak {status[\"VmHWM\"].strip():>12}", flush=True)
+          mb("start")
+          from src.backend.main import app
+          mb("app imported")
+          from src.backend.agent.graph import get_default_router, get_default_rag_pipeline
+          get_default_router().decide("weather in paris", 0.35)
+          mb("router warm")
+          pipeline = get_default_rag_pipeline()
+          mb("pipeline")
+          import pymupdf
+          doc = pymupdf.open("/fixture/handbook.pdf"); doc.close()
+          mb("pdf opened")
+          print(pipeline.ingest_pdf("/fixture/handbook.pdf", user_id="profile"))
+          mb("ingested")
+          '
       - name: Container logs
         if: always()
         run: docker logs app || true
