@@ -1,0 +1,54 @@
+name: Deploy to Hugging Face Spaces
+
+# Runs after CI passes on main (or by hand). Does nothing until the repo has an HF_TOKEN secret and an
+# HF_SPACE variable (e.g. "vid6848/contextai"), so forks and unconfigured repos are unaffected.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-hf
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_SPACE: ${{ vars.HF_SPACE }}
+    steps:
+      - name: Check configuration
+        id: config
+        run: |
+          if [ -z "$HF_TOKEN" ] || [ -z "$HF_SPACE" ]; then
+            echo "::notice::Not deploying: add the HF_TOKEN secret and HF_SPACE variable (see docs/DEPLOY.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.config.outputs.ready == 'true'
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Push a snapshot to the Space
+        if: steps.config.outputs.ready == 'true'
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          # The Space gets the current tree only: its git server rejects binaries outside LFS, and old
+          # commits contain images. Full history stays on GitHub.
+          cp deploy/space_README.md README.md
+          rm -rf .git
+          git init -q -b main
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Deploy ${SHA::7} from github.com/${{ github.repository }}"
+          git push --force "https://hf:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}" main
+          echo "::notice::Deployed ${SHA::7} to https://huggingface.co/spaces/${HF_SPACE}"

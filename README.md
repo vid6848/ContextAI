@@ -150,7 +150,6 @@ cd frontend && npm run lint && npm run typecheck && npm test     # frontend
 
 ## ☁️ Deployment
 
-`docker build .` produces one image: a Node stage builds the React app, and the Python stage serves it with the API.
-
-- **Railway:** `railway.json` builds the Dockerfile and health-checks `/health`. Attach a volume at `/app/data`, or SQLite and ChromaDB data is lost on every redeploy.
-- **Hugging Face Spaces** with Supabase persistence is planned in [#18](https://github.com/vid6848/ContextAI/issues/18) and [#19](https://github.com/vid6848/ContextAI/issues/19).
+One Docker image serves the API and the React app. The free setup is **Hugging Face Spaces** for hosting
+and **Supabase** for the database (Postgres + pgvector) and sign-in; a GitHub Action deploys every
+green commit on `main`. Step-by-step guide: **[docs/DEPLOY.md](docs/DEPLOY.md)**.

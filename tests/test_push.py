@@ -135,3 +135,20 @@ def test_push_payload_is_decryptable_by_the_browser_and_signed(service):
     server_key.verify(der, signed.encode(), ec.ECDSA(hashes.SHA256()))  # raises if the signature is wrong
     claims = json.loads(unb64(signed.split(".")[1]))
     assert scheme == "vapid" and claims["aud"] == "https://fcm.googleapis.com" and claims["sub"].startswith("mailto:")
+
+
+def test_keys_from_settings_survive_redeploys(tmp_path, monkeypatch, capsys):
+    """Keys printed by scripts/generate_vapid_keys.py load from settings and sign pushes."""
+    from scripts.generate_vapid_keys import main as generate
+    from src.backend.core.config import settings
+
+    generate()
+    env = dict(line.split("=", 1) for line in capsys.readouterr().out.strip().splitlines())
+    monkeypatch.setattr(settings, "vapid_public_key", env["VAPID_PUBLIC_KEY"])
+    monkeypatch.setattr(settings, "vapid_private_key", env["VAPID_PRIVATE_KEY"])
+
+    service = PushService(db_path=str(tmp_path / "keys.db"))
+    assert service.keys.public_key == env["VAPID_PUBLIC_KEY"]
+    assert not (tmp_path / "vapid.json").exists()  # nothing generated when keys are configured
+    headers = service.signer.sign({"sub": "mailto:a@b.c", "aud": "https://fcm.googleapis.com"})
+    assert headers["Authorization"].startswith("vapid t=")
