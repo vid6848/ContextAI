@@ -6,7 +6,7 @@
 {"question": "How much paid holiday do I get each year?", "section": "3. Annual leave", "facts": ["28"]}
 {"question": "Can I carry unused vacation days into next year?", "section": "3. Annual leave", "facts": [["five", "5"], "31 March"]}
 {"question": "By what time must I tell my manager I'm sick?", "section": "4. Sick leave", "facts": ["9:30"]}
-{"question": "When do I need a doctor's note?", "section": "4. Sick leave", "facts": [["fourth", "4th", "4"]]}
+{"question": "When do I need a doctor's note?", "section": "4. Sick leave", "facts": [["fourth", "four", "4th", "4"]]}
 {"question": "How long is parental leave for the primary caregiver?", "section": "5. Parental leave", "facts": ["20 weeks"]}
 {"question": "How much time off do new dads who aren't the main carer get?", "section": "5. Parental leave", "facts": [["6 weeks", "six weeks"]]}
 {"question": "Can I fly business class?", "section": "6. Travel and expenses", "facts": ["director"]}

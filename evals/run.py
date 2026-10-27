@@ -176,6 +176,15 @@ def eval_retrieval(pipeline: Any, questions: list[dict[str, Any]]) -> dict[str, 
 # ---------------------------------------------------------------- online
 
 
+_paused = [0.0]  # seconds spent waiting in throttle(), excluded from latencies
+
+
+def stopwatch() -> Any:
+    """Milliseconds since the call, not counting time spent waiting for the rate limit."""
+    started, paused = time.perf_counter(), _paused[0]
+    return lambda: ms(time.perf_counter() - started - (_paused[0] - paused))
+
+
 def throttle(rpm: int) -> None:
     """Space out model calls to stay under the API's requests-per-minute limit."""
     import litellm
@@ -187,6 +196,7 @@ def throttle(rpm: int) -> None:
             wait = last[0] + 60 / rpm - time.monotonic()
             if wait > 0:
                 time.sleep(wait)
+                _paused[0] += wait
             last[0] = time.monotonic()
         return real(*args, **kwargs)
 
@@ -202,7 +212,7 @@ def eval_tool_choice(rows: list[dict[str, Any]], routing: dict[str, Any]) -> dic
     llm = LLMClient()
     llm_ok, hybrid_ok, timings, mistakes = [], [], [], []
     for row, decision in zip(rows, routing["details"], strict=True):
-        started = time.perf_counter()
+        elapsed = stopwatch()
         try:
             message: dict[str, Any] = {}
             for kind, payload in llm.chat_round(build_chat_messages({"message": row["text"]}), tools=TOOL_SPECS):
@@ -211,7 +221,7 @@ def eval_tool_choice(rows: list[dict[str, Any]], routing: dict[str, Any]) -> dic
             called = {c["function"]["name"] for c in message.get("tool_calls") or []}
         except Exception as err:  # counted as a miss, reported below
             called = {f"error: {type(err).__name__}"}
-        timings.append(ms(time.perf_counter() - started))
+        timings.append(elapsed())
         ok = tools_ok(called, row)
         llm_ok.append(ok)
         if not ok:
@@ -237,12 +247,12 @@ def eval_answers(rows: list[dict[str, Any]]) -> dict[str, Any]:
     agent = get_agent_app()
     correct, timings, wrong = [], [], []
     for row in [r for r in rows if r.get("facts")]:
-        started = time.perf_counter()
+        elapsed = stopwatch()
         try:
             answer = agent.invoke({"message": row["text"], "user_id": "eval"}).get("response", "")
         except Exception as err:
             answer = f"error: {type(err).__name__}"
-        timings.append(ms(time.perf_counter() - started))
+        timings.append(elapsed())
         ok = has_facts(answer, row["facts"])
         correct.append(ok)
         if not ok:
@@ -253,7 +263,7 @@ def eval_answers(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 def _judge(llm: Any, question: str, passages: str, answer: str) -> dict[str, bool]:
     prompt = JUDGE_PROMPT.format(question=question, passages=passages, answer=answer)
-    raw = llm.generate_response([{"role": "user", "content": prompt}], temperature=0)
+    raw = llm.generate_response([{"role": "user", "content": prompt}])
     match = re.search(r"\{.*\}", raw, re.S)
     try:
         verdict = json.loads(match.group(0)) if match else {}
@@ -272,13 +282,13 @@ def eval_rag_answers(pipeline: Any, questions: list[dict[str, Any]]) -> dict[str
     judge = LLMClient()
     facts, faithful, relevant, abstained, timings, notes = [], [], [], [], [], []
     for q in questions:
-        started = time.perf_counter()
+        elapsed = stopwatch()
         try:
             result = agent.invoke({"message": q["question"], "user_id": "eval", "attachments": [DOCUMENT_NAME]})
             answer = result.get("response", "")
             sources = result.get("rag_sources") or []
             passages = "\n\n".join(f"[{s['n']}] {s.get('excerpt', '')}" for s in sources)
-            timings.append(ms(time.perf_counter() - started))
+            timings.append(elapsed())
             verdict = _judge(judge, q["question"], passages, answer)
         except Exception as err:
             answer, verdict = f"error: {type(err).__name__}", {"faithful": False, "relevant": False, "abstained": False}
