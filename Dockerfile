@@ -11,12 +11,16 @@ RUN npm run build
 # ---- 2. Python runtime -------------------------------------------------------
 FROM python:3.13-slim
 
-# MALLOC_ARENA_MAX: glibc otherwise keeps a memory arena per thread, which adds up on a 512 MB instance
+# Sized for a 512 MB instance with a fraction of a CPU: glibc would keep a memory arena per thread, and
+# numpy's BLAS would start (and buffer) a thread per core of the host, which reports far more than we get
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
     PORT=8000 \
-    MALLOC_ARENA_MAX=2
+    MALLOC_ARENA_MAX=2 \
+    OMP_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1
 
 WORKDIR /app
 

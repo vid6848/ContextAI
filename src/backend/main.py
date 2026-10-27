@@ -18,6 +18,9 @@ def _warm_up() -> None:
 
     if settings.router_mode == "hybrid":
         get_default_router()
+    from src.backend.db.embeddings import release_memory
+
+    release_memory()
 
 
 @asynccontextmanager

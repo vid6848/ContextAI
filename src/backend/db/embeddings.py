@@ -1,6 +1,8 @@
 """One shared sentence-embedding model (all-MiniLM-L6-v2 via ONNX, 384-d), used by every vector feature."""
 
+import ctypes
 import os
+import sys
 import threading
 from functools import cached_property
 from typing import Any
@@ -34,6 +36,10 @@ def _lean_minilm() -> Any:
             options.log_severity_level = 3
             options.enable_cpu_mem_arena = False
             options.enable_mem_pattern = False
+            # One thread: hosts like Render report the machine's many cores while granting a fraction of
+            # one, and every extra ONNX thread keeps its own buffers
+            options.intra_op_num_threads = 1
+            options.inter_op_num_threads = 1
             path = os.path.join(self.DOWNLOAD_PATH, self.EXTRACTED_FOLDER_NAME, "model.onnx")
             return self.ort.InferenceSession(path, sess_options=options, providers=["CPUExecutionProvider"])
 
@@ -74,6 +80,15 @@ def get_embedder() -> Any:
 
             _embedder = SharedEmbedder()
         return _embedder
+
+
+def release_memory() -> None:
+    """Hand freed heap back to the OS (glibc keeps it otherwise), so a spike doesn't stay counted."""
+    if sys.platform.startswith("linux"):
+        try:
+            ctypes.CDLL("libc.so.6").malloc_trim(0)
+        except OSError:
+            pass
 
 
 def embed(texts: list[str]) -> list[list[float]]:

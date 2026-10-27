@@ -9,6 +9,7 @@ import threading
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -25,6 +26,7 @@ from src.backend.auth import ACCOUNT_PREFIX, USER_ID_PATTERN, bearer_account, cu
 from src.backend.core import tracing
 from src.backend.core.config import settings
 from src.backend.core.rate_limit import rate_limit
+from src.backend.db.embeddings import release_memory
 from src.backend.llm.client import LLMServiceUnavailableError
 from src.backend.memory.extractor import needs_llm_title, post_turn
 from src.backend.memory.sql_db import DEFAULT_CONVERSATION_TITLE
@@ -510,7 +512,10 @@ async def upload_document(
                 raise HTTPException(status_code=400, detail="File is not a valid PDF.")
 
         pipeline = get_default_rag_pipeline()
-        res = pipeline.ingest_pdf(tmp_path, user_id=user_id, document_name=os.path.basename(file.filename))
+        # In a worker thread, so parsing and embedding a big PDF doesn't stall every other request
+        res = await run_in_threadpool(
+            pipeline.ingest_pdf, tmp_path, user_id=user_id, document_name=os.path.basename(file.filename)
+        )
         if not res.get("success"):
             raise HTTPException(status_code=422, detail=res.get("error", "PDF ingestion failed."))
 
@@ -523,6 +528,7 @@ async def upload_document(
     finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
+        release_memory()
 
 
 @router.get("/documents")
