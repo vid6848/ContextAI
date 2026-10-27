@@ -11,10 +11,12 @@ RUN npm run build
 # ---- 2. Python runtime -------------------------------------------------------
 FROM python:3.13-slim
 
+# MALLOC_ARENA_MAX: glibc otherwise keeps a memory arena per thread, which adds up on a 512 MB instance
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
-    PORT=8000
+    PORT=8000 \
+    MALLOC_ARENA_MAX=2
 
 WORKDIR /app
 
