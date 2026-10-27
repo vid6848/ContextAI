@@ -4,6 +4,7 @@ import base64
 import json
 import logging
 import os
+import re
 import threading
 from datetime import UTC, datetime
 from typing import Any
@@ -23,6 +24,15 @@ def _b64url(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
 
 
+def _clean_pem(raw: str) -> str:
+    """Rebuild a PEM from however a host's settings form kept it: literal \\n, spaces instead of line
+    breaks, surrounding quotes, or the VAPID_PRIVATE_KEY= prefix pasted along with the value."""
+    value = raw.strip().removeprefix("VAPID_PRIVATE_KEY=").strip("\"' ").replace("\\n", "\n")
+    body = re.sub(r"\s+", "", re.sub(r"-----(BEGIN|END)[A-Z ]*-----", "", value))
+    lines = [body[i : i + 64] for i in range(0, len(body), 64)]
+    return "-----BEGIN PRIVATE KEY-----\n" + "\n".join(lines) + "\n-----END PRIVATE KEY-----\n"
+
+
 class VapidKeys:
     """VAPID keys identify this server to browsers' push services.
 
@@ -32,9 +42,15 @@ class VapidKeys:
 
     def __init__(self, data_dir: str) -> None:
         if settings.vapid_private_key and settings.vapid_public_key:
-            self.private_pem = settings.vapid_private_key.replace("\\n", "\n")
-            self.public_key = settings.vapid_public_key
-            return
+            pem = _clean_pem(settings.vapid_private_key)
+            try:
+                Vapid.from_pem(pem.encode())
+            except ValueError:
+                # A bad key shouldn't take the whole app down; push still works with generated keys
+                logger.error("VAPID_PRIVATE_KEY can't be read; using generated keys. Re-paste it.")
+            else:
+                self.private_pem, self.public_key = pem, settings.vapid_public_key.strip().strip("\"'")
+                return
         path = os.path.join(data_dir, "vapid.json")
         if os.path.exists(path):
             with open(path) as fh:

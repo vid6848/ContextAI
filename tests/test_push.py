@@ -152,3 +152,37 @@ def test_keys_from_settings_survive_redeploys(tmp_path, monkeypatch, capsys):
     assert not (tmp_path / "vapid.json").exists()  # nothing generated when keys are configured
     headers = service.signer.sign({"sub": "mailto:a@b.c", "aud": "https://fcm.googleapis.com"})
     assert headers["Authorization"].startswith("vapid t=")
+
+
+@pytest.mark.parametrize(
+    "mangle",
+    [
+        lambda pem: pem.replace("\\n", " "),  # line breaks became spaces
+        lambda pem: pem.replace("\\n", "\n"),  # real line breaks
+        lambda pem: f'"{pem}"',  # pasted with quotes
+        lambda pem: f"VAPID_PRIVATE_KEY={pem}",  # pasted with the name
+    ],
+)
+def test_keys_from_settings_tolerate_how_they_were_pasted(tmp_path, monkeypatch, capsys, mangle):
+    from scripts.generate_vapid_keys import main as generate
+    from src.backend.core.config import settings
+
+    generate()
+    env = dict(line.split("=", 1) for line in capsys.readouterr().out.strip().splitlines())
+    monkeypatch.setattr(settings, "vapid_public_key", env["VAPID_PUBLIC_KEY"])
+    monkeypatch.setattr(settings, "vapid_private_key", mangle(env["VAPID_PRIVATE_KEY"]))
+
+    service = PushService(db_path=str(tmp_path / "keys.db"))
+    assert service.keys.public_key == env["VAPID_PUBLIC_KEY"]
+    assert service.signer.sign({"sub": "mailto:a@b.c", "aud": "https://fcm.googleapis.com"})["Authorization"]
+
+
+def test_unreadable_key_falls_back_instead_of_crashing(tmp_path, monkeypatch):
+    from src.backend.core.config import settings
+
+    monkeypatch.setattr(settings, "vapid_public_key", "BPublic")
+    monkeypatch.setattr(settings, "vapid_private_key", "-----BEGIN PRIVATE KEY----- truncated")
+
+    service = PushService(db_path=str(tmp_path / "keys.db"))
+    assert service.keys.public_key != "BPublic"  # generated pair, so pushes still sign
+    assert (tmp_path / "vapid.json").exists()
