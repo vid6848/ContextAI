@@ -11,30 +11,33 @@ from src.backend.core.config import settings
 logger = logging.getLogger(__name__)
 
 
-def extract_city_from_query(query: str) -> str:
-    """Extract city or location name from a natural language query."""
-    cleaned = query.strip()
-    # Patterns like "weather in Tokyo", "weather for Paris, France", "forecast in New York"
-    patterns = [
-        r"(?:weather|forecast|temperature|temp|climate)\s+(?:in|for|at|of)\s+([A-Za-z\s,\.-]+)",
-        r"(?:what\s+is\s+the\s+weather\s+like\s+in)\s+([A-Za-z\s,\.-]+)",
-        r"([A-Za-z\s,\.-]+)\s+weather",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, cleaned, flags=re.IGNORECASE)
-        if match:
-            city = match.group(1).strip("?.! \t\n")
-            if city:
-                return city
+# Time and filler phrases that can trail the place: "in Paris right now", "Berlin tomorrow please"
+_TRAILING = re.compile(
+    r"(?:[\s,]+(?:(?:for|at|in)\s+)?(?:right now|now|today|tonight|tomorrow|currently|at the moment|please|"
+    r"this (?:morning|afternoon|evening|week|weekend)|in (?:celsius|fahrenheit)))+$",
+    re.IGNORECASE,
+)
+# Words that are never the place, for messages without "in/for/at/of": "weather pune", "Tokyo forecast?"
+_NOT_PLACE = {
+    "what", "what's", "whats", "how", "how's", "is", "it", "the", "a", "like", "tell", "me", "show", "give",
+    "weather", "forecast", "temperature", "temp", "climate", "conditions", "current", "currently", "outside",
+    "hot", "cold", "warm", "windy", "humid", "humidity", "rain", "raining", "snow", "snowing", "sunny", "cloudy",
+    "going", "to", "be", "will", "does", "do", "i", "need", "an", "umbrella", "jacket", "should", "bring",
+}
 
-    # Fallback: remove leading query words
-    cleaned = re.sub(
-        r"^(?:what\s+is|what's|how\s+is|tell\s+me)\s+(?:the\s+)?(?:weather|forecast|temperature)\s*",
-        "",
-        cleaned,
-        flags=re.IGNORECASE,
-    ).strip("?.! \t\n")
-    return cleaned or query.strip()
+
+def extract_city_from_query(query: str) -> str:
+    """The place a weather question is about: "how hot is it in Dubai right now" -> "Dubai"."""
+    text = _TRAILING.sub("", query.strip().strip("?.! \t\n")).strip()
+    # The place follows the last "in / for / at / of": "is it snowing in Toronto", "weather of New York"
+    matches = list(re.finditer(r"\b(?:in|for|at|of|near)\s+", text, flags=re.IGNORECASE))
+    if matches:
+        place = text[matches[-1].end():].strip(" ,")
+        if place and place.split()[0].lower() not in _NOT_PLACE:
+            return place
+    # No preposition: drop the weather and question words ("weather pune", "Pune weather today")
+    words = [w for w in re.split(r"\s+", text) if w.lower().strip(",") not in _NOT_PLACE]
+    return " ".join(words).strip(" ,") or query.strip()
 
 
 class WeatherTool:

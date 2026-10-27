@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from src.backend.tools.calculator import CalculatorTool, extract_math_expression
 from src.backend.tools.crypto import CryptoTool, extract_coin_from_query
 from src.backend.tools.weather import WeatherTool, extract_city_from_query
@@ -61,10 +63,27 @@ def test_calculator_natural_language_queries():
 # Weather Tool Tests
 # ============================================================================
 
-def test_extract_city_from_query():
-    """Verify city extraction from weather queries."""
-    assert "tokyo" in extract_city_from_query("What is the weather in Tokyo?").lower()
-    assert "paris" in extract_city_from_query("weather for Paris").lower()
+@pytest.mark.parametrize(
+    ("query", "city"),
+    [
+        ("What is the weather in Tokyo?", "Tokyo"),
+        ("weather for Paris", "Paris"),
+        ("weather pune", "pune"),
+        ("Pune weather today", "Pune"),
+        ("is it snowing in toronto", "toronto"),
+        ("how hot is it in dubai right now", "dubai"),
+        ("current weather conditions in sydney", "sydney"),
+        ("do I need an umbrella in seattle today", "seattle"),
+        ("weather of New York please", "New York"),
+        ("what's the weather like in Paris, France", "Paris, France"),
+        ("weather in São Paulo", "São Paulo"),
+        ("weather in London for tomorrow", "London"),
+        ("Tokyo", "Tokyo"),
+    ],
+)
+def test_extract_city_from_query(query, city):
+    """The place, without weather words, question words or trailing time phrases."""
+    assert extract_city_from_query(query) == city
 
 
 @patch("src.backend.tools.weather.requests.get")

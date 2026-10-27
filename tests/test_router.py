@@ -30,6 +30,8 @@ def test_fast_path_is_precise_and_useful_at_the_configured_threshold(router):
         ("compare eth and sol prices", True),
         ("price of bitcoin", False),
         ("weather in Tokyo?", False),
+        ("weather in rome and in tokyo", True),
+        ("is it raining in London and what's the temperature in Delhi", True),
     ],
 )
 def test_multi_part_guard(text, multi):

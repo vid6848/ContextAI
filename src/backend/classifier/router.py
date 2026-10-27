@@ -36,9 +36,11 @@ def tools_mentioned(text: str) -> set[str]:
 
 
 def looks_multi_part(text: str, intent: str) -> bool:
-    """A second tool's vocabulary, two different coins, or a comparison all need more than one tool call."""
+    """A second tool's vocabulary, two coins or places, or a comparison all need more than one tool call."""
     if tools_mentioned(text) - {intent}:
         return True
+    if intent == "WEATHER" and re.search(r"\b(and|or)\b", text, re.IGNORECASE):
+        return True  # "weather in Rome and Tokyo": the weather node looks up one place
     coins = {_COIN_ALIASES.get(c.lower(), c.lower()) for c in re.findall(_COINS, text, re.IGNORECASE)}
     return len(coins) > 1 or bool(re.search(r"\b(compare|versus|vs\.?)\b", text, re.IGNORECASE))
 
