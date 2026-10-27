@@ -15,6 +15,7 @@ from src.backend.agent.state import AgentState
 from src.backend.agent.toolbox import TOOL_LABELS, TOOL_SPECS, ToolBox
 from src.backend.classifier.intent_classifier import IntentClassifier
 from src.backend.classifier.router import HybridRouter
+from src.backend.core import tracing
 from src.backend.core.config import settings
 from src.backend.llm.client import LLMClient
 from src.backend.memory.sql_db import SQLiteManager
@@ -233,15 +234,22 @@ def agent_step(step_id: str, label: str) -> Iterator[dict[str, Any]]:
     step: dict[str, Any] = {"id": step_id, "label": label, "status": "running"}
     writer({"type": "step", **step})
     started = time.perf_counter()
-    try:
-        yield step
-        step["status"] = "error" if step.pop("failed", False) else "done"
-    except Exception:
-        step["status"] = "error"
-        raise
-    finally:
-        step["duration_ms"] = round((time.perf_counter() - started) * 1000)
-        writer({"type": "step", **step})
+    kind = "retriever" if step_id == "tool:document_rag" else "tool" if step_id.startswith("tool:") else "span"
+    with tracing.span(step_id, kind) as observation:
+        try:
+            yield step
+            step["status"] = "error" if step.pop("failed", False) else "done"
+        except Exception:
+            step["status"] = "error"
+            raise
+        finally:
+            step["duration_ms"] = round((time.perf_counter() - started) * 1000)
+            writer({"type": "step", **step})
+            detail = step.get("detail") or {}
+            observation.update(
+                input=detail.get("input"), output=detail.get("output", detail) or None,
+                metadata={"label": step["label"]}, level="ERROR" if step["status"] == "error" else None,
+            )
 
 
 def answer_cards(state: AgentState) -> list[dict[str, Any]]:
@@ -738,6 +746,8 @@ def build_agent_graph(
                     "tools_used": state.get("tools_used") or ([state["tool_name"]] if state.get("tool_name") else []),
                     "steps": state.get("steps") or [],
                     "stopped": bool(state.get("stopped")),
+                    # Links 👍/👎 on this answer to its Langfuse trace (None when tracing is off)
+                    "trace_id": tracing.current_trace_id(),
                 },
             )
 

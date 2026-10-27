@@ -22,6 +22,7 @@ from src.backend.agent.graph import (
     tool_card,
 )
 from src.backend.auth import ACCOUNT_PREFIX, USER_ID_PATTERN, bearer_account, current_user_id, resolve_user
+from src.backend.core import tracing
 from src.backend.core.config import settings
 from src.backend.core.rate_limit import rate_limit
 from src.backend.llm.client import LLMServiceUnavailableError
@@ -225,6 +226,7 @@ def set_message_feedback(
     if message is None or message["role"] != "assistant":
         raise HTTPException(status_code=404, detail="Message not found.")
     sql_mgr.update_message_metadata(message_id, conversation_id, user_id, {"feedback": request.rating})
+    tracing.score_feedback((message.get("metadata") or {}).get("trace_id"), request.rating)
     return {"success": True, "rating": request.rating}
 
 
@@ -291,9 +293,9 @@ def chat_endpoint(
     conversation = resolve_conversation(request)
     agent = get_agent()
     try:
-        result = agent.invoke(
-            _agent_input(request, conversation)
-        )
+        with tracing.turn(request.user_id, conversation["id"], request.message) as trace:
+            result = agent.invoke(_agent_input(request, conversation))
+            trace.update(output=result.get("response"))
     except ValueError as err:
         # Configuration errors (e.g. missing API key) — return helpful message, not raw 500
         raise HTTPException(status_code=503, detail=str(err)) from err
@@ -365,33 +367,35 @@ async def chat_stream_endpoint(request: ChatRequest, account: str | None = Depen
     def run_agent() -> None:
         final: dict[str, Any] = {}
         try:
-            for mode, chunk in agent.stream(
-                _agent_input(request, conversation),
-                stream_mode=["custom", "values"],
-                config={"configurable": {"stream": True, "cancel_event": cancel_event}},
-            ):
-                if mode == "custom":
-                    publish(chunk)
-                else:
-                    final = chunk
-            publish({
-                "type": "done",
-                "intent": final.get("intent", "GENERAL"),
-                "confidence": float(final.get("confidence", 0.0)),
-                "tool_used": final.get("tool_name"),
-                "sources": final.get("rag_sources"),
-                "tool_output": tool_card(final),
-                "cards": answer_cards(final),
-                "tools_used": final.get("tools_used") or ([final["tool_name"]] if final.get("tool_name") else []),
-                "stopped": bool(final.get("stopped")),
-                "user_message_id": final.get("user_message_id"),
-                "assistant_message_id": final.get("assistant_message_id"),
-            })
-            extra = after_reply(request, final)
-            if extra["changes"]:
-                publish({"type": "memory", "changes": extra["changes"]})
-            if extra["title"]:
-                publish({"type": "title", "title": extra["title"]})
+            with tracing.turn(request.user_id, conversation["id"], request.message) as trace:
+                for mode, chunk in agent.stream(
+                    _agent_input(request, conversation),
+                    stream_mode=["custom", "values"],
+                    config={"configurable": {"stream": True, "cancel_event": cancel_event}},
+                ):
+                    if mode == "custom":
+                        publish(chunk)
+                    else:
+                        final = chunk
+                trace.update(output=final.get("response"), metadata={"stopped": bool(final.get("stopped"))})
+                publish({
+                    "type": "done",
+                    "intent": final.get("intent", "GENERAL"),
+                    "confidence": float(final.get("confidence", 0.0)),
+                    "tool_used": final.get("tool_name"),
+                    "sources": final.get("rag_sources"),
+                    "tool_output": tool_card(final),
+                    "cards": answer_cards(final),
+                    "tools_used": final.get("tools_used") or ([final["tool_name"]] if final.get("tool_name") else []),
+                    "stopped": bool(final.get("stopped")),
+                    "user_message_id": final.get("user_message_id"),
+                    "assistant_message_id": final.get("assistant_message_id"),
+                })
+                extra = after_reply(request, final)
+                if extra["changes"]:
+                    publish({"type": "memory", "changes": extra["changes"]})
+                if extra["title"]:
+                    publish({"type": "title", "title": extra["title"]})
         except Exception as err:
             publish({"type": "error", "detail": _client_error_detail(err)})
         finally:

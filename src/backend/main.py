@@ -23,6 +23,7 @@ def _warm_up() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     from src.backend.api.routes import get_push_service
+    from src.backend.core import tracing
     from src.backend.core.config import settings
     from src.backend.reminders.push import start_push_loop
 
@@ -31,6 +32,7 @@ async def lifespan(_: FastAPI):
     yield
     if stop_push:
         stop_push.set()
+    tracing.flush()  # send buffered traces before the container stops
 
 
 app = FastAPI(

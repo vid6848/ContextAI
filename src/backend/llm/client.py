@@ -9,6 +9,7 @@ from typing import Any
 
 import litellm
 
+from src.backend.core import tracing
 from src.backend.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -137,11 +138,14 @@ class LLMClient:
 
         last_error: Exception | None = None
         for attempt in range(self.max_retries + 1):
+            generation = tracing.generation("completion", target_model, messages)
             try:
                 response = litellm.completion(**call_kwargs)
+                tracing.end_generation(generation, target_model, response)
                 content = response.choices[0].message.content
                 return content or ""
             except Exception as exc:
+                tracing.end_generation(generation, target_model, error=exc)
                 last_error = exc
                 if not is_transient_error(exc) or attempt >= self.max_retries:
                     # Non-transient or exhausted maximum retries
@@ -280,19 +284,27 @@ class LLMClient:
         for model in models:
             for attempt in range(self.max_retries + 1):
                 started = False
+                chunks: list[Any] = []
+                generation = tracing.generation("answer", model, messages)
                 try:
                     stream = litellm.completion(
                         model=model, messages=messages, api_key=self.api_key, stream=True, **kwargs
                     )
                     for chunk in stream:
                         if cancel_event is not None and cancel_event.is_set():
-                            return
+                            break
+                        chunks.append(chunk)
                         delta = chunk.choices[0].delta.content if chunk.choices else None
                         if delta:
                             started = True
                             yield delta
+                    tracing.end_stream(generation, model, chunks, messages)
                     return
+                except GeneratorExit:
+                    tracing.end_stream(generation, model, chunks, messages)
+                    raise
                 except Exception as exc:
+                    tracing.end_generation(generation, model, error=exc)
                     if started or not is_transient_error(exc):
                         raise
                     last_error = exc
@@ -331,6 +343,7 @@ class LLMClient:
             for attempt in range(self.max_retries + 1):
                 started = False
                 chunks: list[Any] = []
+                generation = tracing.generation("agent round", model, messages)
                 try:
                     kwargs: dict[str, Any] = {"model": model, "messages": messages, "api_key": self.api_key,
                                               "stream": True}
@@ -345,6 +358,8 @@ class LLMClient:
                             started = True
                             yield ("token", delta)
                     built = litellm.stream_chunk_builder(chunks, messages=messages) if chunks else None
+                    tracing.end_generation(generation, model, built)
+                    generation = tracing.NOOP  # ended; an early stop below mustn't end it again
                     message = (
                         built.choices[0].message.model_dump(exclude_none=True)
                         if built
@@ -352,7 +367,11 @@ class LLMClient:
                     )
                     yield ("message", message)
                     return
+                except GeneratorExit:
+                    tracing.end_stream(generation, model, chunks, messages)
+                    raise
                 except Exception as exc:
+                    tracing.end_generation(generation, model, error=exc)
                     if started or not is_transient_error(exc):
                         raise
                     last_error = exc

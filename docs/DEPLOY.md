@@ -44,6 +44,7 @@ browsers that subscribed earlier stop receiving reminders.
    | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | from step 2 |
    | `VAPID_CONTACT` | `mailto:you@example.com` |
    | `OPENWEATHER_API_KEY`, `TAVILY_API_KEY` | optional tools |
+   | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | optional: trace every chat turn in [Langfuse](https://cloud.langfuse.com) |
 
 3. Set **Health Check Path** to `/health` and deploy. Render builds the image and serves it at
    `https://<service-name>.onrender.com`, then redeploys on every push to `main`.

@@ -238,12 +238,14 @@ class SQLiteManager:
         with self.get_connection() as conn:
             row = conn.execute(
                 """
-                SELECT id, role, message, timestamp
+                SELECT id, role, message, timestamp, metadata
                 FROM conversation_history
                 WHERE id = ? AND conversation_id = ? AND user_id = ?
                 """,
                 (message_id, conversation_id, user_id),
             ).fetchone()
+        if row is not None:
+            row["metadata"] = decode_json(row["metadata"]) or None
         return row
 
     def update_message_metadata(

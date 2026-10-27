@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     supabase_publishable_key: str = ""
     auth_required: bool = False  # True: no guest mode
 
+    # Langfuse tracing (agent steps, tool calls, tokens, cost, 👍/👎 scores). Empty keys = off.
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_host: str = "https://cloud.langfuse.com"
+
     # Abuse protection (per client IP, per minute) and upload size cap
     rate_limit_chat_per_minute: int = 20
     rate_limit_upload_per_minute: int = 5

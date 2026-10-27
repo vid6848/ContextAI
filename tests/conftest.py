@@ -10,6 +10,7 @@ import pytest
 
 from src.backend.agent import graph
 from src.backend.api import routes
+from src.backend.core import tracing
 from src.backend.core.config import settings
 from src.backend.core.rate_limit import limiter
 from src.backend.db import Database
@@ -35,6 +36,9 @@ def isolate_test_storage(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "gemini_api_key", "")
     monkeypatch.setattr(settings, "openweather_api_key", "")
     monkeypatch.setattr(settings, "tavily_api_key", "")
+    monkeypatch.setattr(settings, "langfuse_public_key", "")
+    monkeypatch.setattr(settings, "langfuse_secret_key", "")
+    tracing.configure(None)
     # Most tests exercise the deterministic classifier path; test_tool_agent.py covers LLM routing
     monkeypatch.setattr(settings, "router_mode", "classifier")
     # Verbatim first-person memories; test_memory_extraction.py covers the LLM extractor
