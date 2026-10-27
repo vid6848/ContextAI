@@ -1,72 +1,100 @@
-{"text": "hey, how's it going?", "intent": "GENERAL"}
-{"text": "can you explain what a black hole is in simple terms", "intent": "GENERAL"}
-{"text": "write me a short poem about autumn", "intent": "GENERAL"}
-{"text": "what's the difference between a list and a tuple in python", "intent": "GENERAL"}
-{"text": "give me three tips for better sleep", "intent": "GENERAL"}
-{"text": "thanks, that was helpful!", "intent": "GENERAL"}
-{"text": "help me write a polite email declining a meeting", "intent": "GENERAL"}
-{"text": "summarize the plot of hamlet", "intent": "GENERAL"}
-{"text": "what are you able to do?", "intent": "GENERAL"}
-{"text": "translate good morning into spanish", "intent": "GENERAL"}
-{"text": "is it going to rain in london tomorrow", "intent": "WEATHER"}
-{"text": "how hot is it in dubai right now", "intent": "WEATHER"}
-{"text": "weather in Tokyo?", "intent": "WEATHER"}
-{"text": "should I bring a jacket in berlin today", "intent": "WEATHER"}
-{"text": "what's the temperature in mumbai", "intent": "WEATHER"}
-{"text": "is it snowing in toronto", "intent": "WEATHER"}
-{"text": "current weather conditions in sydney", "intent": "WEATHER"}
-{"text": "how windy is it in chicago today", "intent": "WEATHER"}
-{"text": "what's bitcoin trading at", "intent": "CRYPTO"}
-{"text": "eth price please", "intent": "CRYPTO"}
-{"text": "how much has solana moved today", "intent": "CRYPTO"}
-{"text": "what is the market cap of dogecoin", "intent": "CRYPTO"}
-{"text": "is btc up or down in the last 24 hours", "intent": "CRYPTO"}
-{"text": "current price of cardano in usd", "intent": "CRYPTO"}
-{"text": "how much is one ethereum worth", "intent": "CRYPTO"}
-{"text": "xrp price now", "intent": "CRYPTO"}
-{"text": "what is 17% of 2340", "intent": "CALCULATOR"}
-{"text": "calculate 125 * 48 / 3", "intent": "CALCULATOR"}
-{"text": "what's 2 to the power of 16", "intent": "CALCULATOR"}
-{"text": "divide 9875 by 25", "intent": "CALCULATOR"}
-{"text": "how much is 345 plus 678 minus 120", "intent": "CALCULATOR"}
-{"text": "what is the square of 144", "intent": "CALCULATOR"}
-{"text": "compute (12 + 8) * 7.5", "intent": "CALCULATOR"}
-{"text": "multiply 33 by 21", "intent": "CALCULATOR"}
-{"text": "search the web for the latest iphone release date", "intent": "WEB_SEARCH"}
-{"text": "who won the most recent champions league final", "intent": "WEB_SEARCH"}
-{"text": "look up the latest news about spacex", "intent": "WEB_SEARCH"}
-{"text": "find recent reviews of the new macbook pro", "intent": "WEB_SEARCH"}
-{"text": "google the opening hours of the louvre", "intent": "WEB_SEARCH"}
-{"text": "what happened in the news today", "intent": "WEB_SEARCH"}
-{"text": "search online for the best rated pizza in naples", "intent": "WEB_SEARCH"}
-{"text": "what's the latest version of react", "intent": "WEB_SEARCH"}
-{"text": "what does my pdf say about the refund policy", "intent": "DOCUMENT"}
-{"text": "summarize the document I uploaded", "intent": "DOCUMENT"}
-{"text": "according to the report, what were the main risks", "intent": "DOCUMENT"}
-{"text": "find the section about termination in my contract", "intent": "DOCUMENT"}
-{"text": "what does page 3 of the handbook say about leave", "intent": "DOCUMENT"}
-{"text": "in my uploaded file, who is the author", "intent": "DOCUMENT"}
-{"text": "quote the paragraph about pricing from the pdf", "intent": "DOCUMENT"}
-{"text": "does the manual mention warranty", "intent": "DOCUMENT"}
-{"text": "remind me to call mom tomorrow at 6", "intent": "REMINDER"}
-{"text": "set a reminder to pay rent on friday", "intent": "REMINDER"}
-{"text": "remind me in 20 minutes to check the oven", "intent": "REMINDER"}
-{"text": "can you remind me about the dentist next monday", "intent": "REMINDER"}
-{"text": "don't let me forget to water the plants tonight", "intent": "REMINDER"}
-{"text": "what reminders do I have", "intent": "REMINDER"}
-{"text": "schedule a reminder for my team meeting at 3pm", "intent": "REMINDER"}
-{"text": "ping me tomorrow morning to send the invoice", "intent": "REMINDER"}
-{"text": "remember that I'm vegetarian", "intent": "MEMORY"}
-{"text": "my name is Arjun", "intent": "MEMORY"}
-{"text": "I live in Bangalore", "intent": "MEMORY"}
-{"text": "what do you know about me", "intent": "MEMORY"}
-{"text": "I prefer short answers", "intent": "MEMORY"}
-{"text": "forget that I work at Acme", "intent": "MEMORY"}
-{"text": "do you remember my favourite color", "intent": "MEMORY"}
-{"text": "note that I'm allergic to nuts", "intent": "MEMORY"}
-{"text": "what's the weather in paris and the price of bitcoin", "intent": "MULTI"}
-{"text": "search for flights to rome and remind me to book them tonight", "intent": "MULTI"}
-{"text": "how much is 3 btc in dollars", "intent": "MULTI"}
-{"text": "what's the temperature in delhi in fahrenheit plus 10", "intent": "MULTI"}
-{"text": "compare eth and sol prices and tell me which went up more", "intent": "MULTI"}
-{"text": "check my pdf for the deadline and set a reminder a day before", "intent": "MULTI"}
+{"text": "hey, how's it going?", "intent": "GENERAL", "tools": []}
+{"text": "can you explain what a black hole is in simple terms", "intent": "GENERAL", "tools": [], "optional": ["web_search"]}
+{"text": "write me a short poem about autumn", "intent": "GENERAL", "tools": []}
+{"text": "what's the difference between a list and a tuple in python", "intent": "GENERAL", "tools": []}
+{"text": "give me three tips for better sleep", "intent": "GENERAL", "tools": []}
+{"text": "thanks, that was helpful!", "intent": "GENERAL", "tools": []}
+{"text": "help me write a polite email declining a meeting", "intent": "GENERAL", "tools": []}
+{"text": "summarize the plot of hamlet", "intent": "GENERAL", "tools": [], "optional": ["web_search"]}
+{"text": "what are you able to do?", "intent": "GENERAL", "tools": []}
+{"text": "translate good morning into spanish", "intent": "GENERAL", "tools": []}
+{"text": "is it going to rain in london tomorrow", "intent": "WEATHER", "tools": ["get_weather"]}
+{"text": "how hot is it in dubai right now", "intent": "WEATHER", "tools": ["get_weather"]}
+{"text": "weather in Tokyo?", "intent": "WEATHER", "tools": ["get_weather"]}
+{"text": "should I bring a jacket in berlin today", "intent": "WEATHER", "tools": ["get_weather"]}
+{"text": "what's the temperature in mumbai", "intent": "WEATHER", "tools": ["get_weather"]}
+{"text": "is it snowing in toronto", "intent": "WEATHER", "tools": ["get_weather"]}
+{"text": "current weather conditions in sydney", "intent": "WEATHER", "tools": ["get_weather"]}
+{"text": "how windy is it in chicago today", "intent": "WEATHER", "tools": ["get_weather"]}
+{"text": "what's bitcoin trading at", "intent": "CRYPTO", "tools": ["get_crypto_price"]}
+{"text": "eth price please", "intent": "CRYPTO", "tools": ["get_crypto_price"]}
+{"text": "how much has solana moved today", "intent": "CRYPTO", "tools": ["get_crypto_price"]}
+{"text": "what is the market cap of dogecoin", "intent": "CRYPTO", "tools": ["get_crypto_price"]}
+{"text": "is btc up or down in the last 24 hours", "intent": "CRYPTO", "tools": ["get_crypto_price"]}
+{"text": "current price of cardano in usd", "intent": "CRYPTO", "tools": ["get_crypto_price"]}
+{"text": "how much is one ethereum worth", "intent": "CRYPTO", "tools": ["get_crypto_price"]}
+{"text": "xrp price now", "intent": "CRYPTO", "tools": ["get_crypto_price"]}
+{"text": "what is 17% of 2340", "intent": "CALCULATOR", "tools": ["calculator"], "facts": ["397.8"]}
+{"text": "calculate 125 * 48 / 3", "intent": "CALCULATOR", "tools": ["calculator"], "facts": ["2000"]}
+{"text": "what's 2 to the power of 16", "intent": "CALCULATOR", "tools": ["calculator"], "facts": ["65536"]}
+{"text": "divide 9875 by 25", "intent": "CALCULATOR", "tools": ["calculator"], "facts": ["395"]}
+{"text": "how much is 345 plus 678 minus 120", "intent": "CALCULATOR", "tools": ["calculator"], "facts": ["903"]}
+{"text": "what is the square of 144", "intent": "CALCULATOR", "tools": ["calculator"], "facts": ["20736"]}
+{"text": "compute (12 + 8) * 7.5", "intent": "CALCULATOR", "tools": ["calculator"], "facts": ["150"]}
+{"text": "multiply 33 by 21", "intent": "CALCULATOR", "tools": ["calculator"], "facts": ["693"]}
+{"text": "search the web for the latest iphone release date", "intent": "WEB_SEARCH", "tools": ["web_search"]}
+{"text": "who won the most recent champions league final", "intent": "WEB_SEARCH", "tools": ["web_search"]}
+{"text": "look up the latest news about spacex", "intent": "WEB_SEARCH", "tools": ["web_search"]}
+{"text": "find recent reviews of the new macbook pro", "intent": "WEB_SEARCH", "tools": ["web_search"]}
+{"text": "google the opening hours of the louvre", "intent": "WEB_SEARCH", "tools": ["web_search"]}
+{"text": "what happened in the news today", "intent": "WEB_SEARCH", "tools": ["web_search"]}
+{"text": "search online for the best rated pizza in naples", "intent": "WEB_SEARCH", "tools": ["web_search"]}
+{"text": "what's the latest version of react", "intent": "WEB_SEARCH", "tools": ["web_search"]}
+{"text": "what does my pdf say about the refund policy", "intent": "DOCUMENT", "tools": ["search_documents"]}
+{"text": "summarize the document I uploaded", "intent": "DOCUMENT", "tools": ["search_documents"]}
+{"text": "according to the report, what were the main risks", "intent": "DOCUMENT", "tools": ["search_documents"]}
+{"text": "find the section about termination in my contract", "intent": "DOCUMENT", "tools": ["search_documents"]}
+{"text": "what does page 3 of the handbook say about leave", "intent": "DOCUMENT", "tools": ["search_documents"]}
+{"text": "in my uploaded file, who is the author", "intent": "DOCUMENT", "tools": ["search_documents"]}
+{"text": "quote the paragraph about pricing from the pdf", "intent": "DOCUMENT", "tools": ["search_documents"]}
+{"text": "does the manual mention warranty", "intent": "DOCUMENT", "tools": ["search_documents"]}
+{"text": "remind me to call mom tomorrow at 6", "intent": "REMINDER", "tools": ["create_reminder"], "optional": ["list_reminders"]}
+{"text": "set a reminder to pay rent on friday", "intent": "REMINDER", "tools": ["create_reminder"]}
+{"text": "remind me in 20 minutes to check the oven", "intent": "REMINDER", "tools": ["create_reminder"]}
+{"text": "can you remind me about the dentist next monday", "intent": "REMINDER", "tools": ["create_reminder"]}
+{"text": "don't let me forget to water the plants tonight", "intent": "REMINDER", "tools": ["create_reminder"]}
+{"text": "what reminders do I have", "intent": "REMINDER", "tools": ["list_reminders"]}
+{"text": "schedule a reminder for my team meeting at 3pm", "intent": "REMINDER", "tools": ["create_reminder"]}
+{"text": "ping me tomorrow morning to send the invoice", "intent": "REMINDER", "tools": ["create_reminder"]}
+{"text": "remember that I'm vegetarian", "intent": "MEMORY", "tools": []}
+{"text": "my name is Arjun", "intent": "MEMORY", "tools": []}
+{"text": "I live in Bangalore", "intent": "MEMORY", "tools": []}
+{"text": "what do you know about me", "intent": "MEMORY", "tools": []}
+{"text": "I prefer short answers", "intent": "MEMORY", "tools": []}
+{"text": "forget that I work at Acme", "intent": "MEMORY", "tools": []}
+{"text": "do you remember my favourite color", "intent": "MEMORY", "tools": []}
+{"text": "note that I'm allergic to nuts", "intent": "MEMORY", "tools": []}
+{"text": "what's the weather in paris and the price of bitcoin", "intent": "MULTI", "tools": ["get_weather", "get_crypto_price"]}
+{"text": "search for flights to rome and remind me to book them tonight", "intent": "MULTI", "tools": ["web_search", "create_reminder"]}
+{"text": "how much is 3 btc in dollars", "intent": "MULTI", "tools": ["get_crypto_price"]}
+{"text": "what's the temperature in delhi in fahrenheit plus 10", "intent": "MULTI", "tools": ["get_weather"], "optional": ["calculator"]}
+{"text": "compare eth and sol prices and tell me which went up more", "intent": "MULTI", "tools": ["get_crypto_price"]}
+{"text": "check my pdf for the deadline and set a reminder a day before", "intent": "MULTI", "tools": ["search_documents"]}
+{"text": "what's the capital of australia", "intent": "GENERAL", "tools": [], "optional": ["web_search"]}
+{"text": "explain recursion with a simple example", "intent": "GENERAL", "tools": []}
+{"text": "give me a recipe for fluffy pancakes", "intent": "GENERAL", "tools": []}
+{"text": "how do I center a div in css", "intent": "GENERAL", "tools": []}
+{"text": "do I need an umbrella in seattle today", "intent": "WEATHER", "tools": ["get_weather"]}
+{"text": "humidity in singapore right now", "intent": "WEATHER", "tools": ["get_weather"]}
+{"text": "how cold is it in moscow", "intent": "WEATHER", "tools": ["get_weather"]}
+{"text": "price of litecoin", "intent": "CRYPTO", "tools": ["get_crypto_price"]}
+{"text": "is bitcoin up today", "intent": "CRYPTO", "tools": ["get_crypto_price"]}
+{"text": "what's the current value of polkadot", "intent": "CRYPTO", "tools": ["get_crypto_price"]}
+{"text": "what is a 15% tip on 86.40", "intent": "CALCULATOR", "tools": ["calculator"], "facts": ["12.96"]}
+{"text": "square root of 1764", "intent": "CALCULATOR", "tools": ["calculator"], "facts": ["42"]}
+{"text": "convert 72 fahrenheit to celsius", "intent": "CALCULATOR", "tools": ["calculator"], "facts": ["22.2"]}
+{"text": "if I save 450 a month for 18 months how much will I have", "intent": "CALCULATOR", "tools": ["calculator"], "facts": ["8100"]}
+{"text": "who is the current prime minister of the uk", "intent": "WEB_SEARCH", "tools": ["web_search"]}
+{"text": "latest score in the india vs australia cricket series", "intent": "WEB_SEARCH", "tools": ["web_search"]}
+{"text": "what are reviewers saying about the newest zelda game", "intent": "WEB_SEARCH", "tools": ["web_search"]}
+{"text": "what does my contract say about the notice period", "intent": "DOCUMENT", "tools": ["search_documents"]}
+{"text": "list the action items from the meeting notes I uploaded", "intent": "DOCUMENT", "tools": ["search_documents"]}
+{"text": "how long is the warranty according to the manual", "intent": "DOCUMENT", "tools": ["search_documents"]}
+{"text": "remind me at 9pm to take my medicine", "intent": "REMINDER", "tools": ["create_reminder"]}
+{"text": "show my upcoming reminders", "intent": "REMINDER", "tools": ["list_reminders"]}
+{"text": "remind me at 7am tomorrow to go running", "intent": "REMINDER", "tools": ["create_reminder"]}
+{"text": "I'm training for a marathon", "intent": "MEMORY", "tools": []}
+{"text": "where do I live?", "intent": "MEMORY", "tools": []}
+{"text": "what's 15% of the current bitcoin price", "intent": "MULTI", "tools": ["get_crypto_price"]}
+{"text": "weather in rome and in tokyo", "intent": "MULTI", "tools": ["get_weather"]}
+{"text": "look up how tall the eiffel tower is and convert it to feet", "intent": "MULTI", "tools": ["web_search"]}

@@ -1,0 +1,25 @@
+{"question": "How many hours is the standard working week?", "section": "1. Working hours", "facts": ["37.5"]}
+{"question": "What are the core hours?", "section": "1. Working hours", "facts": ["10:00", "15:00"]}
+{"question": "What's the earliest time I can start work in the morning?", "section": "1. Working hours", "facts": ["7:00"]}
+{"question": "How many days a week can I work from home?", "section": "2. Remote work", "facts": [["three", "3"]]}
+{"question": "Is there a budget for my home office setup?", "section": "2. Remote work", "facts": ["600"]}
+{"question": "How much paid holiday do I get each year?", "section": "3. Annual leave", "facts": ["28"]}
+{"question": "Can I carry unused vacation days into next year?", "section": "3. Annual leave", "facts": [["five", "5"], "31 March"]}
+{"question": "By what time must I tell my manager I'm sick?", "section": "4. Sick leave", "facts": ["9:30"]}
+{"question": "When do I need a doctor's note?", "section": "4. Sick leave", "facts": [["fourth", "4th", "4"]]}
+{"question": "How long is parental leave for the primary caregiver?", "section": "5. Parental leave", "facts": ["20 weeks"]}
+{"question": "How much time off do new dads who aren't the main carer get?", "section": "5. Parental leave", "facts": [["6 weeks", "six weeks"]]}
+{"question": "Can I fly business class?", "section": "6. Travel and expenses", "facts": ["director"]}
+{"question": "How long do I have to submit an expense claim?", "section": "6. Travel and expenses", "facts": ["30 days"]}
+{"question": "What is the yearly learning budget?", "section": "7. Learning budget", "facts": [["1,500", "1500"]]}
+{"question": "Is there money for attending conferences?", "section": "7. Learning budget", "facts": [["1,500", "1500"]]}
+{"question": "How many study days do I get?", "section": "7. Learning budget", "facts": [["5", "five"]]}
+{"question": "How often are laptops replaced?", "section": "8. Equipment and security", "facts": [["three years", "3 years"]]}
+{"question": "My work laptop was stolen, who do I contact?", "section": "8. Equipment and security", "facts": ["security@northwind.example"]}
+{"question": "How long is the probation period?", "section": "9. Probation and notice", "facts": [["six months", "6 months"]]}
+{"question": "What notice do I have to give after probation?", "section": "9. Probation and notice", "facts": [["one month", "1 month"]]}
+{"question": "A supplier sent me a bottle of wine, do I need to declare it?", "section": "10. Gifts and hospitality", "facts": ["50"]}
+{"question": "How quickly must gifts be reported to compliance?", "section": "10. Gifts and hospitality", "facts": [["one week", "1 week", "a week"]]}
+{"question": "What is Northwind's stock ticker symbol?", "section": null, "facts": []}
+{"question": "Does the office have a gym or fitness subsidy?", "section": null, "facts": []}
+{"question": "What is the dress code at Northwind?", "section": null, "facts": []}

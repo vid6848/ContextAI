@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   backend:
@@ -18,7 +19,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Lint
-        run: ruff check src tests
+        run: ruff check src tests evals
       - name: Test
         run: pytest -q
 
@@ -46,6 +47,38 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - name: Test against Postgres
         run: pytest -q
+
+  evals:
+    # Offline evals (routing, retrieval, latency) gate every push. The model-based evals run on PRs and
+    # manual runs when the repo has a GEMINI_API_KEY secret; they report, but don't fail the build.
+    runs-on: ubuntu-latest
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - name: Offline evals
+        run: python -m evals.run --check --markdown offline.md && cat offline.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Model evals
+        if: github.event_name != 'push' && env.GEMINI_API_KEY != ''
+        continue-on-error: true
+        run: |
+          python -m evals.run --online --rpm 14 --json eval-results.json --markdown online.md
+          { echo; echo "## Model evals"; cat online.md; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-results
+          path: |
+            offline.md
+            online.md
+            eval-results.json
+          if-no-files-found: ignore
 
   frontend:
     runs-on: ubuntu-latest
@@ -90,6 +123,13 @@ jobs:
           curl -sf localhost:8000/ | grep -q '<div id="root">'
           curl -sf localhost:8000/chat | grep -q '<div id="root">'
           curl -sf "localhost:8000/api/v1/conversations?user_id=smoke" | grep -q conversations
+      - name: Memory after warm-up fits a 512 MB instance
+        run: |
+          sleep 20  # warm-up loads the classifier and the embedding model in the background
+          used=$(docker stats --no-stream --format '{{.MemUsage}}' app | cut -d/ -f1 | xargs)
+          echo "Container memory after warm-up: $used" | tee -a "$GITHUB_STEP_SUMMARY"
+          mib=$(echo "$used" | awk '{v=$1+0; if ($1 ~ /GiB/) v*=1024; else if ($1 ~ /KiB/) v/=1024; printf "%d", v}')
+          [ "$mib" -le 480 ] || { echo "::error::Uses $used; Render's free instance has 512 MB"; exit 1; }
       - name: Container logs
         if: always()
         run: docker logs app || true
