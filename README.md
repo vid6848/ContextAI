@@ -43,7 +43,7 @@ flowchart LR
         L --> S
     end
 
-    L & G <--> LLM["Gemini via LiteLLM<br/>retries + fallback model"]
+    L & G <--> LLM["Gemini (OpenAI-compatible API)<br/>retries + fallback model"]
     T & L --> Tools["calculator · weather · crypto ·<br/>web search · reminders · document search"]
     Agent --> DB[("Supabase Postgres + pgvector<br/>chats · memories · document chunks · reminders")]
     API -. "after the reply" .-> X["memory extraction + chat title"]
@@ -100,6 +100,7 @@ Model: `gemini-3.5-flash-lite`. Results from `python -m evals.run --online` on 2
 - **One graph, two transports.** The streaming and JSON endpoints run the same LangGraph; steps go through the stream writer, which is a no-op under `invoke()`. Cancelling (Stop) sets an event the model loop checks, and the partial answer is still saved.
 - **Postgres + pgvector, SQLite + Chroma behind the same interface.** Production keeps everything in Supabase so a free container can restart without losing data; local development needs no database at all. CI runs the full test suite against both.
 - **Embeddings computed in-process.** MiniLM via ONNX keeps search free and private. Chroma's default embedder rebuilt the model on every call and padded every text to 256 tokens, which pushed the server past 1 GB; a shared session that pads per batch produces identical vectors at 405 MB peak, and CI fails if the container needs more than 480 MB.
+- **No LLM SDK.** LiteLLM cost about 190 MB of memory just by being imported, over a third of the free instance, and PDF uploads tipped the server over 512 MB. Gemini speaks the OpenAI chat format, so a small client streams answers and tool calls over plain HTTP, keeping retries, the fallback model and the thought signatures Gemini needs passed back between tool rounds.
 - **Facts, not transcripts, as memory.** An LLM pass turns each exchange into add / update / delete operations on short facts, so "I moved to Pune" replaces the old city instead of contradicting it, and every change is visible and editable.
 - **Citations that point at real text.** Chunks follow the PDF's headings, results are re-ranked with keyword coverage, and sources are numbered across all searches in a turn, so `[2]` always opens the exact excerpt the model saw.
 - **Tracing that can't break answers.** Langfuse is off without keys; when on, failures are swallowed and logged, generations are closed explicitly (streams are generators), and the trace id is stored with each answer so feedback lands on the right trace.
@@ -113,7 +114,7 @@ Model: `gemini-3.5-flash-lite`. Results from `python -m evals.run --online` on 2
 | Frontend | React 19, TypeScript, Vite, Tailwind v4, shadcn/ui, Zustand, React Router |
 | API | FastAPI + Server-Sent Events |
 | Agent | LangGraph, Gemini function calling with multi-tool chaining, hybrid TF-IDF + MiniLM router |
-| LLM | Gemini via LiteLLM (swap providers with one env var) |
+| LLM | Gemini over its OpenAI-compatible API with a small `requests` client (no SDK) |
 | Data | Supabase Postgres + pgvector (SQLite + ChromaDB locally), heading-aware PDF chunking, hybrid re-ranking |
 | Auth | Supabase Auth (email links) with guest mode |
 | Quality | pytest (204), Vitest (18), eval suite, ruff, oxlint, GitHub Actions |
@@ -189,7 +190,7 @@ To run it like production (FastAPI serves the built app): `cd frontend && npm ru
 | Variable | Required | Purpose |
 |---|---|---|
 | `GEMINI_API_KEY` | ✅ | LLM access ([Google AI Studio](https://aistudio.google.com/)) |
-| `MODEL_NAME` / `FALLBACK_MODEL_NAME` | | Any LiteLLM model string |
+| `MODEL_NAME` / `FALLBACK_MODEL_NAME` | | Any Gemini model name |
 | `DATABASE_URL` | | Postgres with pgvector (e.g. Supabase); empty = SQLite + ChromaDB under `./data` |
 | `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` | | Email-link sign-in; empty = guests only |
 | `TAVILY_API_KEY` / `OPENWEATHER_API_KEY` | | Web search and weather tools |

@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pywebpush import WebPushException
 
+from src.backend.core.config import settings
 from src.backend.main import app
 from src.backend.reminders.push import PushService
 from src.backend.reminders.reminder_manager import ReminderManager
@@ -25,7 +26,9 @@ def past(minutes=1):
     return (datetime.now(UTC) - timedelta(minutes=minutes)).isoformat()
 
 
-def test_keys_are_generated_once_and_reused(tmp_path):
+def test_keys_are_generated_once_and_reused(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "vapid_public_key", "")  # a local .env may set fixed keys
+    monkeypatch.setattr(settings, "vapid_private_key", "")
     first = PushService(db_path=str(tmp_path / "a.db")).keys
     second = PushService(db_path=str(tmp_path / "a.db")).keys
     assert first.public_key == second.public_key and len(first.public_key) == 87

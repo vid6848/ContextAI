@@ -8,10 +8,14 @@ from typing import Any
 import chromadb
 
 from src.backend.core.config import settings
+from src.backend.db.embeddings import embed
 
 
 class ChromaMemoryStore:
-    """Persistent semantic memory store powered by ChromaDB."""
+    """Persistent semantic memory store powered by ChromaDB.
+
+    Vectors come from the shared embedder: Chroma would otherwise load its own, full-size copy of the model.
+    """
 
     def __init__(
         self,
@@ -57,6 +61,7 @@ class ChromaMemoryStore:
 
         self.collection.add(
             documents=[memory],
+            embeddings=embed([memory]),
             metadatas=[meta],
             ids=[mid],
         )
@@ -79,6 +84,7 @@ class ChromaMemoryStore:
 
         self.collection.add(
             documents=documents,
+            embeddings=embed(documents),
             metadatas=metadatas,
             ids=ids,
         )
@@ -102,7 +108,7 @@ class ChromaMemoryStore:
             return []
 
         results = self.collection.query(
-            query_texts=[query],
+            query_embeddings=embed([query]),
             n_results=min(limit, available),
             where=where_filter,
         )
@@ -168,7 +174,7 @@ class ChromaMemoryStore:
         if meta is None:
             return False
         meta = {**meta, "updated_at": datetime.now(UTC).isoformat()}
-        self.collection.update(ids=[memory_id], documents=[fact], metadatas=[meta])
+        self.collection.update(ids=[memory_id], documents=[fact], embeddings=embed([fact]), metadatas=[meta])
         return True
 
     def delete_memory(self, memory_id: str, user_id: str) -> bool:

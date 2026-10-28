@@ -12,9 +12,8 @@ requests==2.34.2
 # Verifying Supabase sign-in tokens (ES256 via JWKS)
 pyjwt[crypto]==2.15.1
 
-# Agent orchestration & LLM abstraction
+# Agent orchestration (models are called over HTTP: src/backend/llm/client.py)
 langgraph==1.2.12
-litellm==1.102.1
 
 # Postgres (Supabase) storage; SQLite + ChromaDB are used when DATABASE_URL is empty
 psycopg[binary]==3.3.6

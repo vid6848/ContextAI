@@ -187,9 +187,9 @@ def stopwatch() -> Any:
 
 def throttle(rpm: int) -> None:
     """Space out model calls to stay under the API's requests-per-minute limit."""
-    import litellm
+    from src.backend.llm import client
 
-    real, lock, last = litellm.completion, threading.Lock(), [0.0]
+    real, lock, last = client.completion, threading.Lock(), [0.0]
 
     def paced(*args: Any, **kwargs: Any) -> Any:
         with lock:
@@ -200,7 +200,7 @@ def throttle(rpm: int) -> None:
             last[0] = time.monotonic()
         return real(*args, **kwargs)
 
-    litellm.completion = paced
+    client.completion = paced
 
 
 def eval_tool_choice(rows: list[dict[str, Any]], routing: dict[str, Any]) -> dict[str, Any]:

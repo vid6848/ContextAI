@@ -2,33 +2,35 @@
 
 from unittest.mock import MagicMock, patch
 
-import litellm
 import pytest
 
 from src.backend.llm.client import (
+    Completion,
+    LLMAPIError,
     LLMClient,
     LLMServiceUnavailableError,
+    assemble,
+    completion,
     is_transient_error,
     normalize_model_name,
 )
 
 
-@patch("src.backend.llm.client.litellm.completion")
+@patch("src.backend.llm.client.completion")
 def test_llm_client_generate_response_mocked(mock_completion):
-    """Verify LLMClient calls litellm with expected system prompt and returns content."""
-    mock_response = MagicMock()
-    mock_response.choices = [MagicMock(message=MagicMock(content="Hello! I am Claude."))]
+    """Verify LLMClient calls the model with expected system prompt and returns content."""
+    mock_response = Completion(message={"role": "assistant", "content": "Hello! I am Gemini."})
     mock_completion.return_value = mock_response
 
-    client = LLMClient(model_name="claude-3-5-sonnet-20241022", api_key="test-anthropic-key")
+    client = LLMClient(model_name="gemini-3.5-flash-lite", api_key="test-gemini-key")
     result = client.generate_response(message="Hello there", intent="GENERAL")
 
-    assert result == "Hello! I am Claude."
+    assert result == "Hello! I am Gemini."
     mock_completion.assert_called_once()
     call_kwargs = mock_completion.call_args.kwargs
 
-    assert call_kwargs["model"] == "anthropic/claude-3-5-sonnet-20241022"
-    assert call_kwargs["api_key"] == "test-anthropic-key"
+    assert call_kwargs["model"] == "gemini/gemini-3.5-flash-lite"
+    assert call_kwargs["api_key"] == "test-gemini-key"
     messages = call_kwargs["messages"]
     assert len(messages) == 2
     assert messages[0]["role"] == "system"
@@ -49,8 +51,8 @@ def test_normalize_model_name():
 def test_is_transient_error_detection():
     """Verify transient vs non-transient error classification."""
     # Transient: 503, 429, timeouts
-    svc_unavailable = litellm.ServiceUnavailableError("503 UNAVAILABLE", "gemini/gemini-3.5-flash-lite", "gemini")
-    rate_limit = litellm.RateLimitError("429 Rate limit", "gemini/gemini-3.5-flash-lite", "gemini")
+    svc_unavailable = LLMAPIError(503, "503 UNAVAILABLE")
+    rate_limit = LLMAPIError(429, "429 Rate limit")
     generic_503 = Exception("503 Service Unavailable: This model is currently experiencing high demand.")
     
     assert is_transient_error(svc_unavailable) is True
@@ -58,8 +60,8 @@ def test_is_transient_error_detection():
     assert is_transient_error(generic_503) is True
 
     # Non-transient: Auth, bad request, not found, ValueError
-    auth_err = litellm.AuthenticationError("401 Invalid API Key", "gemini/gemini-3.5-flash-lite", "gemini")
-    bad_req = litellm.BadRequestError("400 Bad Request", "gemini/gemini-3.5-flash-lite", "gemini")
+    auth_err = LLMAPIError(401, "401 Invalid API Key")
+    bad_req = LLMAPIError(400, "400 Bad Request")
     val_err = ValueError("API key missing")
 
     assert is_transient_error(auth_err) is False
@@ -68,12 +70,11 @@ def test_is_transient_error_detection():
 
 
 @patch("src.backend.llm.client.time.sleep")
-@patch("src.backend.llm.client.litellm.completion")
+@patch("src.backend.llm.client.completion")
 def test_llm_client_successful_retry(mock_completion, mock_sleep):
     """Verify LLMClient retries on transient 503 and returns on subsequent success."""
-    err_503 = litellm.ServiceUnavailableError("503 UNAVAILABLE", "gemini/gemini-3.5-flash-lite", "gemini")
-    success_resp = MagicMock()
-    success_resp.choices = [MagicMock(message=MagicMock(content="Success after retry."))]
+    err_503 = LLMAPIError(503, "503 UNAVAILABLE")
+    success_resp = Completion(message={"role": "assistant", "content": "Success after retry."})
 
     # 1st call fails, 2nd call succeeds
     mock_completion.side_effect = [err_503, success_resp]
@@ -93,14 +94,10 @@ def test_llm_client_successful_retry(mock_completion, mock_sleep):
 
 
 @patch("src.backend.llm.client.time.sleep")
-@patch("src.backend.llm.client.litellm.completion")
+@patch("src.backend.llm.client.completion")
 def test_llm_client_final_failure_after_retries(mock_completion, mock_sleep):
     """Verify LLMClient exhausts bounded retries and raises LLMServiceUnavailableError cleanly."""
-    err_503 = litellm.ServiceUnavailableError(
-        "503 UNAVAILABLE: Model is experiencing high demand",
-        "gemini/gemini-3.5-flash-lite",
-        "gemini",
-    )
+    err_503 = LLMAPIError(503, "503 UNAVAILABLE: Model is experiencing high demand")
     mock_completion.side_effect = err_503
 
     # Client without fallback model
@@ -122,14 +119,10 @@ def test_llm_client_final_failure_after_retries(mock_completion, mock_sleep):
 
 
 @patch("src.backend.llm.client.time.sleep")
-@patch("src.backend.llm.client.litellm.completion")
+@patch("src.backend.llm.client.completion")
 def test_llm_client_final_failure_after_retries_and_fallback(mock_completion, mock_sleep):
     """Verify both primary and fallback models exhaust bounded retries before failing."""
-    err_503 = litellm.ServiceUnavailableError(
-        "503 UNAVAILABLE: Model is experiencing high demand",
-        "gemini/gemini-3.5-flash-lite",
-        "gemini",
-    )
+    err_503 = LLMAPIError(503, "503 UNAVAILABLE: Model is experiencing high demand")
     mock_completion.side_effect = err_503
 
     client = LLMClient(
@@ -150,16 +143,11 @@ def test_llm_client_final_failure_after_retries_and_fallback(mock_completion, mo
 
 
 @patch("src.backend.llm.client.time.sleep")
-@patch("src.backend.llm.client.litellm.completion")
+@patch("src.backend.llm.client.completion")
 def test_llm_client_fallback_model_success(mock_completion, mock_sleep):
     """Verify that when primary model fails after retries, fallback model is invoked and succeeds."""
-    err_503 = litellm.ServiceUnavailableError(
-        "503 UNAVAILABLE",
-        "gemini/gemini-3.5-flash-lite",
-        "gemini",
-    )
-    fallback_resp = MagicMock()
-    fallback_resp.choices = [MagicMock(message=MagicMock(content="Response from fallback model."))]
+    err_503 = LLMAPIError(503, "503 UNAVAILABLE")
+    fallback_resp = Completion(message={"role": "assistant", "content": "Response from fallback model."})
 
     # Primary model fails 3 times (initial + 2 retries), then fallback succeeds on 1st attempt
     mock_completion.side_effect = [err_503, err_503, err_503, fallback_resp]
@@ -182,10 +170,10 @@ def test_llm_client_fallback_model_success(mock_completion, mock_sleep):
     assert last_call_kwargs["model"] == "gemini/gemini-3.1-flash-lite"
 
 
-@patch("src.backend.llm.client.litellm.completion")
+@patch("src.backend.llm.client.completion")
 def test_llm_client_auth_error_not_retried(mock_completion):
     """Verify authentication errors fail immediately without retrying."""
-    auth_err = litellm.AuthenticationError("401 Invalid API key", "gemini/gemini-3.5-flash-lite", "gemini")
+    auth_err = LLMAPIError(401, "401 Invalid API key")
     mock_completion.side_effect = auth_err
 
     client = LLMClient(
@@ -195,14 +183,14 @@ def test_llm_client_auth_error_not_retried(mock_completion):
         max_retries=2,
     )
 
-    with pytest.raises(litellm.AuthenticationError):
+    with pytest.raises(LLMAPIError):
         client.generate_response(message="Test query")
 
     # MUST be called only once — no retries for auth errors
     assert mock_completion.call_count == 1
 
 
-@patch("src.backend.llm.client.litellm.completion")
+@patch("src.backend.llm.client.completion")
 def test_llm_client_missing_key_raises_without_calling_api(mock_completion):
     """Verify missing API key raises ValueError immediately."""
     client = LLMClient(
@@ -215,3 +203,45 @@ def test_llm_client_missing_key_raises_without_calling_api(mock_completion):
 
     assert "LLM API key is not configured" in str(exc_info.value)
     mock_completion.assert_not_called()
+
+
+def test_assemble_keeps_gemini_tool_calls_and_thought_signatures():
+    """Gemini streams each tool call whole, without an index, with a signature that must be sent back."""
+    signature = {"google": {"thought_signature": "sig=="}}
+    chunks = [
+        {"choices": [{"delta": {"role": "assistant", "tool_calls": [{
+            "id": "call_1", "type": "function", "extra_content": signature,
+            "function": {"name": "calculator", "arguments": '{"expression":"17*23"}'},
+        }]}}]},
+        {"choices": [{"delta": {"tool_calls": [{
+            "id": "call_2", "type": "function", "function": {"name": "weather", "arguments": '{"city":"Pune"}'},
+        }]}}], "usage": {"prompt_tokens": 55, "completion_tokens": 18}},
+    ]
+    built = assemble(chunks)
+    first, second = built.message["tool_calls"]
+    assert first == {"id": "call_1", "type": "function", "extra_content": signature,
+                     "function": {"name": "calculator", "arguments": '{"expression":"17*23"}'}}
+    assert second["function"]["name"] == "weather"
+    assert built.usage == {"prompt_tokens": 55, "completion_tokens": 18}
+
+
+def test_assemble_joins_openai_style_argument_deltas():
+    chunks = [
+        {"choices": [{"delta": {"content": "Let me check. "}}]},
+        {"choices": [{"delta": {"tool_calls": [
+            {"index": 0, "id": "c", "type": "function", "function": {"name": "calculator", "arguments": '{"ex'}}]}}]},
+        {"choices": [{"delta": {"tool_calls": [{"index": 0, "function": {"arguments": 'pression":"1+1"}'}}]}}]},
+    ]
+    built = assemble(chunks)
+    assert built.content == "Let me check. "
+    assert built.message["tool_calls"][0]["function"] == {"name": "calculator", "arguments": '{"expression":"1+1"}'}
+
+
+@patch("src.backend.llm.client.requests.post")
+def test_completion_reports_api_errors_with_status(mock_post):
+    mock_post.return_value = MagicMock(status_code=429, json=lambda: [{"error": {"message": "Quota exceeded"}}])
+    with pytest.raises(LLMAPIError) as exc_info:
+        completion("gemini/gemini-3.5-flash-lite", [{"role": "user", "content": "hi"}], api_key="k")
+    assert exc_info.value.status_code == 429 and "Quota exceeded" in str(exc_info.value)
+    assert is_transient_error(exc_info.value)
+    assert mock_post.call_args.kwargs["json"]["model"] == "gemini-3.5-flash-lite"

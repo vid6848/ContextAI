@@ -10,6 +10,7 @@ import chromadb
 import pymupdf
 
 from src.backend.core.config import settings
+from src.backend.db.embeddings import embed
 from src.backend.rag.rerank import rerank
 from src.backend.rag.structure import chunk_document_text, extract_blocks, structure_chunks
 
@@ -190,13 +191,16 @@ class DocumentRAGPipeline:
     # ---- storage primitives (overridden by the Postgres/pgvector store) ----
 
     def _upsert(self, ids: list[str], documents: list[str], metadatas: list[dict[str, Any]]) -> None:
-        self.collection.upsert(documents=documents, metadatas=metadatas, ids=ids)
+        # Embedded here with the shared model: Chroma would otherwise load its own, full-size copy
+        self.collection.upsert(documents=documents, embeddings=embed(documents), metadatas=metadatas, ids=ids)
 
     def _candidates(
         self, query: str, n: int, user_id: str | None, document_names: list[str] | None
     ) -> list[dict[str, Any]]:
         """Nearest chunks with squared-L2 distance over unit vectors (what rerank expects)."""
-        results = self.collection.query(query_texts=[query], n_results=n, where=self._where(user_id, document_names))
+        results = self.collection.query(
+            query_embeddings=embed([query]), n_results=n, where=self._where(user_id, document_names)
+        )
         chunks: list[dict[str, Any]] = []
         if results and results.get("documents") and results["documents"][0]:
             docs = results["documents"][0]

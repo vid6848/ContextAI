@@ -1,1 +1,1 @@
-"""LLM abstraction package using LiteLLM."""
+"""LLM client package (Gemini)."""

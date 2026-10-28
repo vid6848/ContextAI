@@ -98,24 +98,19 @@ def generation(name: str, model: str, messages: list[Any]) -> Any:
 
 
 def end_generation(observation: Any, model: str, response: Any = None, error: Exception | None = None) -> None:
-    """Attach output, token usage and cost from a LiteLLM response (streams: built with
-    stream_chunk_builder), or the error, then close the observation."""
+    """Attach output and token usage from a Completion (streams: rebuilt with assemble), or the error,
+    then close the observation. Langfuse prices the call from the model name and usage."""
     if observation is NOOP:
         return
     try:
         if error is not None:
             observation.update(level="ERROR", status_message=f"{type(error).__name__}: {error}"[:500])
         elif response is not None:
-            import litellm
-
-            output = response.choices[0].message.model_dump(exclude_none=True)
-            details: dict[str, Any] = {"model": model, "output": output}
-            if usage := getattr(response, "usage", None):
-                details["usage_details"] = {"input": usage.prompt_tokens or 0, "output": usage.completion_tokens or 0}
-            try:
-                details["cost_details"] = {"total": litellm.completion_cost(completion_response=response, model=model)}
-            except Exception:
-                pass  # unknown pricing; Langfuse can still price it from the model name and usage
+            details: dict[str, Any] = {"model": model, "output": response.message}
+            if usage := response.usage:
+                details["usage_details"] = {
+                    "input": usage.get("prompt_tokens") or 0, "output": usage.get("completion_tokens") or 0,
+                }
             observation.update(**details)
         observation.end()
     except Exception:
@@ -126,10 +121,10 @@ def end_stream(observation: Any, model: str, chunks: list[Any], messages: list[A
     """end_generation() for a stream, rebuilding the full response from its chunks only when tracing."""
     if observation is NOOP:
         return
-    import litellm
+    from src.backend.llm.client import assemble
 
     try:
-        built = litellm.stream_chunk_builder(chunks, messages=messages) if chunks else None
+        built = assemble(chunks) if chunks else None
     except Exception:
         built = None
     end_generation(observation, model, built)

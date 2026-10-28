@@ -1,11 +1,9 @@
 """Tests for Langfuse tracing: a chat turn becomes one trace, and 👍/👎 become scores on it."""
 
-import functools
 import json
 from unittest.mock import MagicMock
 from uuid import uuid4
 
-import litellm
 import pytest
 from fastapi.testclient import TestClient
 from langfuse import Langfuse
@@ -14,6 +12,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 
 from src.backend.core import tracing
 from src.backend.core.config import settings
+from src.backend.llm import client as llm_client
 from src.backend.main import app
 
 client = TestClient(app)
@@ -21,7 +20,7 @@ client = TestClient(app)
 
 @pytest.fixture
 def traced(monkeypatch):
-    """Tracing on, spans kept in memory, and LiteLLM answering with a canned (but real) response."""
+    """Tracing on, spans kept in memory, and the model answering with a canned stream."""
     exporter = InMemorySpanExporter()
     langfuse = Langfuse(
         public_key=f"pk-lf-{uuid4().hex}",  # Langfuse shares one exporter per key
@@ -31,7 +30,13 @@ def traced(monkeypatch):
     monkeypatch.setattr(langfuse, "create_score", MagicMock())
     tracing.configure(langfuse)
     monkeypatch.setattr(settings, "gemini_api_key", "test-key")
-    monkeypatch.setattr(litellm, "completion", functools.partial(litellm.completion, mock_response="15 × 4 = 60."))
+    def canned(**_):
+        return iter([
+            {"choices": [{"delta": {"role": "assistant", "content": "15 × 4 = 60."}}]},
+            {"choices": [], "usage": {"prompt_tokens": 40, "completion_tokens": 8}},
+        ])
+
+    monkeypatch.setattr(llm_client, "completion", canned)
     yield langfuse, exporter
     tracing.configure(None)
 

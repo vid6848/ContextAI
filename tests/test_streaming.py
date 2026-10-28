@@ -4,20 +4,18 @@ import json
 import threading
 from unittest.mock import MagicMock, patch
 
-import litellm
 import pytest
 from fastapi.testclient import TestClient
 
 from src.backend.agent.graph import get_agent_app, get_default_sql_manager
-from src.backend.llm.client import LLMClient, LLMServiceUnavailableError
+from src.backend.llm.client import LLMAPIError, LLMClient, LLMServiceUnavailableError
 from src.backend.main import app
 
 client = TestClient(app)
-MODEL = "gemini/gemini-3.5-flash-lite"
 
 
-def _chunk(text: str) -> MagicMock:
-    return MagicMock(choices=[MagicMock(delta=MagicMock(content=text))])
+def _chunk(text: str) -> dict:
+    return {"choices": [{"delta": {"content": text}}]}
 
 
 def _stream(payload: dict) -> list[tuple[str, dict]]:
@@ -39,9 +37,9 @@ def _stream(payload: dict) -> list[tuple[str, dict]]:
 
 
 @patch("src.backend.llm.client.time.sleep")
-@patch("src.backend.llm.client.litellm.completion")
+@patch("src.backend.llm.client.completion")
 def test_stream_retries_transient_errors_before_first_token(mock_completion, _sleep):
-    err_503 = litellm.ServiceUnavailableError("503 UNAVAILABLE", MODEL, "gemini")
+    err_503 = LLMAPIError(503, "UNAVAILABLE")
     mock_completion.side_effect = [err_503, iter([_chunk("Hel"), _chunk("lo")])]
 
     llm = LLMClient(model_name="gemini-3.5-flash-lite", fallback_model_name="", api_key="k", base_delay=0.01)
@@ -49,16 +47,16 @@ def test_stream_retries_transient_errors_before_first_token(mock_completion, _sl
     assert mock_completion.call_args.kwargs["stream"] is True
 
 
-@patch("src.backend.llm.client.litellm.completion")
+@patch("src.backend.llm.client.completion")
 def test_stream_does_not_retry_after_tokens_were_sent(mock_completion):
     def broken_stream():
         yield _chunk("Partial")
-        raise litellm.ServiceUnavailableError("503 UNAVAILABLE", MODEL, "gemini")
+        raise LLMAPIError(503, "UNAVAILABLE")
 
     mock_completion.return_value = broken_stream()
     llm = LLMClient(model_name="gemini-3.5-flash-lite", fallback_model_name="", api_key="k")
     received = []
-    with pytest.raises(litellm.ServiceUnavailableError):
+    with pytest.raises(LLMAPIError):
         for delta in llm.stream_response("hi"):
             received.append(delta)
     assert received == ["Partial"]
@@ -66,9 +64,9 @@ def test_stream_does_not_retry_after_tokens_were_sent(mock_completion):
 
 
 @patch("src.backend.llm.client.time.sleep")
-@patch("src.backend.llm.client.litellm.completion")
+@patch("src.backend.llm.client.completion")
 def test_stream_raises_service_unavailable_after_retries_and_fallback(mock_completion, _sleep):
-    mock_completion.side_effect = litellm.ServiceUnavailableError("503 UNAVAILABLE", MODEL, "gemini")
+    mock_completion.side_effect = LLMAPIError(503, "UNAVAILABLE")
     llm = LLMClient(
         model_name="gemini-3.5-flash-lite", fallback_model_name="gemini-3.1-flash-lite", api_key="k", max_retries=1
     )
@@ -77,7 +75,7 @@ def test_stream_raises_service_unavailable_after_retries_and_fallback(mock_compl
     assert mock_completion.call_count == 4  # 2 attempts x 2 models
 
 
-@patch("src.backend.llm.client.litellm.completion")
+@patch("src.backend.llm.client.completion")
 def test_stream_stops_when_cancelled(mock_completion):
     cancel = threading.Event()
     mock_completion.return_value = iter([_chunk("one "), _chunk("two "), _chunk("three")])
