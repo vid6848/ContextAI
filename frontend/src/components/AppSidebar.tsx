@@ -35,6 +35,7 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { isTouchDevice } from "@/hooks/useMediaQuery"
 import { useAuth } from "@/lib/auth"
 import { groupConversations } from "@/lib/dates"
 import { MOD } from "@/lib/platform"
@@ -79,7 +80,7 @@ export function AppSidebar({ onNavigate, onCollapse, onOpenPanel, searchRef }: A
       <div className="space-y-1 px-2">
         <Button
           variant="ghost"
-          className="h-9 w-full justify-start gap-2.5 px-2.5 text-[0.9rem] font-normal"
+          className="h-9 w-full justify-start gap-2.5 px-2.5 text-[0.9rem] font-normal touch:h-11"
           onClick={() => {
             navigate("/chat")
             onNavigate?.()
@@ -87,7 +88,7 @@ export function AppSidebar({ onNavigate, onCollapse, onOpenPanel, searchRef }: A
         >
           <SquarePen className="size-4" />
           New chat
-          <kbd className="ml-auto font-sans text-xs text-muted-foreground">{MOD}⇧O</kbd>
+          <kbd className="ml-auto font-sans text-xs text-muted-foreground touch:hidden">{MOD}⇧O</kbd>
         </Button>
         <div className="relative">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -95,9 +96,9 @@ export function AppSidebar({ onNavigate, onCollapse, onOpenPanel, searchRef }: A
             ref={searchRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={`Search chats  ${MOD}K`}
+            placeholder={isTouchDevice() ? "Search chats" : `Search chats  ${MOD}K`}
             aria-label="Search chats"
-            className="h-9 w-full rounded-md bg-transparent pr-2 pl-[34px] text-[0.9rem] outline-none placeholder:text-muted-foreground hover:bg-sidebar-accent focus:bg-sidebar-accent"
+            className="h-9 w-full rounded-md bg-transparent pr-2 touch:h-11 pl-[34px] text-[0.9rem] outline-none placeholder:text-muted-foreground hover:bg-sidebar-accent focus:bg-sidebar-accent"
           />
         </div>
       </div>
@@ -163,7 +164,7 @@ function ConversationRow({ conversation, onNavigate }: { conversation: Conversat
             }
           }}
           aria-label="Chat title"
-          className="h-8 w-full rounded-md border border-ring/50 bg-background px-2.5 text-[0.9rem] outline-none"
+          className="h-8 w-full rounded-md border border-ring/50 bg-background px-2.5 text-[0.9rem] outline-none touch:h-11"
         />
       </li>
     )
@@ -176,7 +177,7 @@ function ConversationRow({ conversation, onNavigate }: { conversation: Conversat
         onClick={onNavigate}
         className={({ isActive }) =>
           cn(
-            "block truncate rounded-md py-1.5 pr-8 pl-2.5 text-[0.9rem] text-sidebar-foreground/85 hover:bg-sidebar-accent",
+            "block truncate rounded-md py-1.5 pr-8 pl-2.5 touch:py-2.5 touch:pr-11 text-[0.9rem] text-sidebar-foreground/85 hover:bg-sidebar-accent",
             isActive && "bg-sidebar-accent font-medium text-sidebar-foreground",
           )
         }
@@ -189,7 +190,7 @@ function ConversationRow({ conversation, onNavigate }: { conversation: Conversat
           <button
             type="button"
             aria-label={`Options for ${conversation.title}`}
-            className="absolute top-1/2 right-1 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover/row:opacity-100 hover:text-foreground focus-visible:opacity-100 aria-expanded:opacity-100 max-md:opacity-100"
+            className="absolute top-1/2 right-1 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover/row:opacity-100 hover:text-foreground focus-visible:opacity-100 aria-expanded:opacity-100 max-md:opacity-100 touch:size-9 touch:opacity-100"
           >
             <MoreHorizontal className="size-4" />
           </button>

@@ -4,6 +4,7 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { isTouchDevice, useMediaQuery } from "@/hooks/useMediaQuery"
 import { MAX_UPLOAD_MB, uploadWithProgress } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
@@ -40,7 +41,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
   const addFiles = (files: FileList | File[]) => {
     const pdfs = Array.from(files).filter((f) => {
-      if (f.type !== "application/pdf" && !f.name.toLowerCase().endsWith(".pdf")) {
+      // iOS Files and some Android pickers report an empty or non-standard type, so the extension counts too
+      if (!/pdf/i.test(f.type) && !f.name.toLowerCase().endsWith(".pdf")) {
         toast.error(`${f.name} isn't a PDF. Only PDFs can be attached.`)
         return false
       }
@@ -71,7 +73,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           update(att.id, { status: "error", detail: err.message })
         })
     }
-    textarea.current?.focus()
+    // On phones and tablets this would pop the keyboard up over the upload progress
+    if (!isTouchDevice()) textarea.current?.focus()
   }
 
   const removeAttachment = (att: Attachment) => {
@@ -89,6 +92,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     el.style.height = `${Math.min(el.scrollHeight, parseFloat(getComputedStyle(el).maxHeight) || 240)}px`
   }, [value])
 
+  const narrow = useMediaQuery("(max-width: 639px)")
   const uploading = attachments.some((a) => a.status === "uploading")
   const ready = attachments.filter((a) => a.status === "ready")
   const canSend = !streaming && !uploading && (value.trim().length > 0 || ready.length > 0)
@@ -116,7 +120,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             <li
               key={a.id}
               className={cn(
-                "relative flex max-w-[15rem] items-center gap-2.5 overflow-hidden rounded-xl border bg-background py-2 pr-8 pl-2.5",
+                "relative flex max-w-full items-center sm:max-w-[15rem] gap-2.5 overflow-hidden rounded-xl border bg-background py-2 pr-8 pl-2.5",
                 a.status === "error" && "border-step-error/40",
               )}
             >
@@ -148,7 +152,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                 type="button"
                 onClick={() => removeAttachment(a)}
                 aria-label={`Remove ${a.name}`}
-                className="absolute top-1.5 right-1.5 flex size-5 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+                className="absolute top-1 right-1 flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 <X className="size-3.5" />
               </button>
@@ -182,7 +186,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               type="button"
               variant="ghost"
               size="icon"
-              className="size-9 shrink-0 rounded-full text-muted-foreground"
+              className="size-10 shrink-0 rounded-full text-muted-foreground"
               onClick={() => fileInput.current?.click()}
               aria-label="Attach PDFs"
             >
@@ -213,8 +217,17 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               submit()
             }
           }}
-          placeholder={ready.length ? "Ask about your PDF, or press Enter to summarize" : "Ask anything, or attach a PDF"}
-          className="max-h-[13.75rem] flex-1 resize-none bg-transparent py-2 pl-1 text-[1rem] leading-relaxed outline-none placeholder:text-muted-foreground"
+          enterKeyHint="send"
+          placeholder={
+            ready.length
+              ? narrow
+                ? "Ask about your PDF"
+                : "Ask about your PDF, or press Enter to summarize"
+              : narrow
+                ? "Ask anything"
+                : "Ask anything, or attach a PDF"
+          }
+          className="max-h-[min(13.75rem,30dvh)] min-w-0 flex-1 resize-none bg-transparent py-2 pl-1 text-[1rem] leading-relaxed outline-none placeholder:text-muted-foreground"
         />
         <Button
           type="submit"

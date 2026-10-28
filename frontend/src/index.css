@@ -6,6 +6,8 @@
 @import "@fontsource-variable/jetbrains-mono";
 
 @custom-variant dark (&:is(.dark *));
+/* Touch screens (phones, iPads): no hover, so anything revealed on hover has to be visible already */
+@custom-variant touch (@media (hover: none));
 
 @theme inline {
   --font-sans: "Manrope Variable", ui-sans-serif, system-ui, sans-serif;
@@ -168,6 +170,10 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* No grey flash on tap in iOS Safari, and no text inflation in landscape */
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
@@ -229,9 +235,12 @@
   line-height: 1.6;
   padding: 14px 16px;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
 }
-.md .table-wrap { overflow-x: auto; }
-.md table { width: 100%; border-collapse: collapse; font-size: 0.94em; }
+.md .table-wrap { overflow-x: auto; overscroll-behavior-x: contain; }
+/* Fill the column, but grow wider (and scroll inside .table-wrap) rather than splitting words in narrow cells */
+.md table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: 0.94em; }
+.md th, .md td { overflow-wrap: break-word; max-width: 22rem; }
 .md .katex-display { overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
 .md th, .md td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
 .md th { background: var(--muted); font-weight: 600; }

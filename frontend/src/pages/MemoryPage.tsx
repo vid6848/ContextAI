@@ -51,7 +51,7 @@ function MemoryRow({ memory, onChanged }: { memory: Memory; onChanged: () => voi
   }
 
   return (
-    <li className="group flex items-start gap-3.5 rounded-2xl border bg-card/80 p-4 shadow-[0_14px_34px_-28px_rgb(30_20_90/0.45)] backdrop-blur-xl">
+    <li className="group flex items-start gap-3 rounded-2xl border bg-card/80 p-3 sm:gap-3.5 sm:p-4 shadow-[0_14px_34px_-28px_rgb(30_20_90/0.45)] backdrop-blur-xl">
       <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-step-memory/12 text-step-memory">
         <Brain className="size-4" />
       </span>
@@ -73,14 +73,14 @@ function MemoryRow({ memory, onChanged }: { memory: Memory; onChanged: () => voi
             className="w-full rounded-lg border border-brand/40 bg-background px-2.5 py-1.5 text-[1rem] outline-none"
           />
         ) : (
-          <p className="text-[1rem] leading-snug">{memory.fact}</p>
+          <p className="text-[1rem] leading-snug [overflow-wrap:anywhere]">{memory.fact}</p>
         )}
         <p className="mt-1 text-[0.82rem] text-muted-foreground">
           {memory.source === "manual" ? "Added by you" : "Learned from a chat"}
           {memory.updated_at ? `, ${relative(memory.updated_at)}` : ""}
         </p>
       </div>
-      <div className={cn("flex shrink-0 gap-0.5", !editing && "opacity-0 group-hover:opacity-100 focus-within:opacity-100 max-md:opacity-100")}>
+      <div className={cn("flex shrink-0 gap-0.5", !editing && "opacity-0 group-hover:opacity-100 focus-within:opacity-100 max-md:opacity-100 touch:opacity-100")}>
         {editing ? (
           <>
             <Button variant="ghost" size="icon" aria-label="Save" onClick={save}>
@@ -153,7 +153,7 @@ export function MemoryPage() {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto w-full max-w-[52rem] px-5 pt-8 pb-16">
+      <div className="mx-auto w-full max-w-[52rem] px-4 pt-6 pb-[max(4rem,env(safe-area-inset-bottom))] sm:px-5 sm:pt-8">
         <h1 className="animate-rise font-display text-[clamp(2.25rem,4vw,3.25rem)] leading-tight font-semibold tracking-[-0.03em]">
           What ContextAI <span className="text-gradient">remembers</span>
         </h1>
@@ -167,11 +167,11 @@ export function MemoryPage() {
             value={draft}
             maxLength={300}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder="Teach it something, e.g. I prefer short answers"
+            placeholder="e.g. I prefer short answers"
             aria-label="New memory"
             className="h-12 min-w-0 flex-1 rounded-2xl border bg-card/80 px-4 text-[1rem] backdrop-blur-xl outline-none focus:border-brand/50"
           />
-          <Button type="submit" disabled={!draft.trim()} className="h-12 rounded-2xl px-5">
+          <Button type="submit" disabled={!draft.trim()} className="h-12 shrink-0 rounded-2xl px-4 sm:px-5">
             <Plus /> Add
           </Button>
         </form>

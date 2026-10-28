@@ -33,7 +33,7 @@ function ActionButton({
         <Button
           variant="ghost"
           size="icon"
-          className={cn("size-8 text-muted-foreground", pressed && "text-foreground")}
+          className={cn("size-8 text-muted-foreground touch:size-10", pressed && "text-foreground")}
           onClick={onClick}
           aria-label={label}
           aria-pressed={pressed}
@@ -108,7 +108,7 @@ export function UserMessage({ message }: { message: ChatMessage }) {
   return (
     <div className="group flex flex-col items-end">
       {message.meta?.attachments?.length ? (
-        <ul className="mb-1.5 flex max-w-[85%] flex-wrap justify-end gap-1.5" aria-label="Attached files">
+        <ul className="mb-1.5 flex max-w-[92%] flex-wrap sm:max-w-[85%] justify-end gap-1.5" aria-label="Attached files">
           {message.meta.attachments.map((name) => (
             <li key={name} className="flex items-center gap-2 rounded-xl border bg-card py-1.5 pr-3 pl-2 text-[0.8125rem]">
               <span className="flex size-6 items-center justify-center rounded-md bg-step-docs/10 text-step-docs">
@@ -119,10 +119,10 @@ export function UserMessage({ message }: { message: ChatMessage }) {
           ))}
         </ul>
       ) : null}
-      <div className="max-w-[85%] rounded-2xl rounded-br-md border border-brand/15 bg-brand/[0.07] px-4 py-2.5 backdrop-blur text-[1rem] leading-relaxed whitespace-pre-wrap">
+      <div className="max-w-[92%] rounded-2xl rounded-br-md [overflow-wrap:anywhere] sm:max-w-[85%] border border-brand/15 bg-brand/[0.07] px-4 py-2.5 backdrop-blur text-[1rem] leading-relaxed whitespace-pre-wrap">
         {message.content}
       </div>
-      <div className="mt-1 flex opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 max-md:opacity-100">
+      <div className="mt-1 flex opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 max-md:opacity-100 touch:opacity-100">
         <CopyButton text={message.content} />
         {!busy && (
           <ActionButton
@@ -200,7 +200,7 @@ export function AssistantMessage({ message, isLast }: { message: ChatMessage; is
       )}
 
       {!message.streaming && (
-        <div className={cn("mt-1.5 -ml-2 flex", !isLast && "opacity-0 transition-opacity group-hover:opacity-100 max-md:opacity-100")}>
+        <div className={cn("mt-1.5 -ml-2 flex", !isLast && "opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 max-md:opacity-100 touch:opacity-100")}>
           {message.content && <CopyButton text={message.content} />}
           {message.id != null && message.content && !message.error && (
             <>
@@ -216,7 +216,7 @@ export function AssistantMessage({ message, isLast }: { message: ChatMessage; is
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 gap-1.5 px-2 text-muted-foreground"
+              className="h-8 gap-1.5 px-2 text-muted-foreground touch:h-10"
               onClick={() => showSources(message.key, 1)}
             >
               <BookOpen className="size-4" />

@@ -35,6 +35,14 @@ export function AppLayout() {
     void loadConversations()
   }, [loadConversations])
 
+  // The drawer only exists below the lg breakpoint; close it if the window grows (e.g. rotating an iPad)
+  useEffect(() => {
+    const wide = window.matchMedia("(min-width: 1024px)")
+    const onChange = () => wide.matches && setMobileOpen(false)
+    wide.addEventListener("change", onChange)
+    return () => wide.removeEventListener("change", onChange)
+  }, [])
+
   // Signing in or out changes whose chats we show
   const reset = useChat((s) => s.reset)
   useEffect(
@@ -70,7 +78,7 @@ export function AppLayout() {
       const key = e.key.toLowerCase()
       if (key === "k") {
         e.preventDefault()
-        if (window.matchMedia("(max-width: 767px)").matches) setMobileOpen(true)
+        if (window.matchMedia("(max-width: 1023px)").matches) setMobileOpen(true)
         else setCollapsedPersist(false)
         setTimeout(() => searchRef.current?.focus(), 50)
       } else if (key === "o" && e.shiftKey) {
@@ -91,7 +99,7 @@ export function AppLayout() {
   }
 
   return (
-    <div className="relative isolate flex h-dvh overflow-hidden">
+    <div className="relative isolate flex h-dvh overflow-hidden pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]">
       <BrandBackground soft />
       <a
         href="#composer"
@@ -100,21 +108,25 @@ export function AppLayout() {
         Skip to message box
       </a>
       {!collapsed && (
-        <aside className="hidden w-[17rem] shrink-0 border-r border-sidebar-border/70 md:block">
+        <aside className="hidden w-[17rem] shrink-0 border-r border-sidebar-border/70 pt-[env(safe-area-inset-top)] lg:block">
           <AppSidebar onCollapse={() => setCollapsedPersist(true)} onOpenPanel={openPanel} searchRef={searchRef} />
         </aside>
       )}
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="w-[18rem] p-0" showCloseButton={false}>
+        <SheetContent
+          side="left"
+          className="p-0 data-[side=left]:w-[min(20rem,85vw)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]"
+          showCloseButton={false}
+        >
           <SheetTitle className="sr-only">Chats</SheetTitle>
           <AppSidebar onNavigate={() => setMobileOpen(false)} onOpenPanel={openPanel} searchRef={searchRef} />
         </SheetContent>
       </Sheet>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-1 px-3">
-          <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobileOpen(true)} aria-label="Open sidebar">
+        <header className="flex h-[calc(3.5rem+env(safe-area-inset-top))] shrink-0 items-center gap-1 px-2 pt-[env(safe-area-inset-top)] sm:px-3">
+          <Button variant="ghost" size="icon" className="size-10 lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open sidebar">
             <Menu className="size-[1.125rem]" />
           </Button>
           {collapsed && (
@@ -122,19 +134,19 @@ export function AppLayout() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="hidden md:inline-flex"
+                className="hidden lg:inline-flex"
                 onClick={() => setCollapsedPersist(false)}
                 aria-label="Open sidebar"
               >
                 <PanelLeftOpen className="size-[1.125rem]" />
               </Button>
-              <Button variant="ghost" size="icon" className="hidden md:inline-flex" onClick={() => navigate("/chat")} aria-label="New chat">
+              <Button variant="ghost" size="icon" className="hidden lg:inline-flex" onClick={() => navigate("/chat")} aria-label="New chat">
                 <SquarePen className="size-[1.125rem]" />
               </Button>
             </>
           )}
           <h1 className="truncate px-2 text-[0.9rem] font-medium text-foreground/80">{title ?? ""}</h1>
-          <Button variant="ghost" size="icon" className="ml-auto md:hidden" onClick={() => navigate("/chat")} aria-label="New chat">
+          <Button variant="ghost" size="icon" className="ml-auto size-10 lg:hidden" onClick={() => navigate("/chat")} aria-label="New chat">
             <SquarePen className="size-[1.125rem]" />
           </Button>
         </header>

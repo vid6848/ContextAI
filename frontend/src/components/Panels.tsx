@@ -185,7 +185,7 @@ function RemindersDialog({ open, onClose }: { open: boolean; onClose: () => void
           </DialogDescription>
         </DialogHeader>
         {push === "off" && (
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-brand/25 bg-brand/[0.06] px-3.5 py-2.5 text-sm">
+          <div className="flex flex-col items-start gap-2 rounded-xl border border-brand/25 sm:flex-row sm:items-center sm:justify-between sm:gap-3 bg-brand/[0.06] px-3.5 py-2.5 text-sm">
             <span>Get notified when a reminder is due, even when ContextAI isn't open.</span>
             <Button
               size="sm"
@@ -212,7 +212,7 @@ function RemindersDialog({ open, onClose }: { open: boolean; onClose: () => void
           </p>
         )}
         <form onSubmit={create} className="flex flex-col gap-2 sm:flex-row">
-          <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Call the dentist" aria-label="Reminder" />
+          <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Call the dentist" aria-label="Reminder" className="h-10" />
           <Input
             value={when}
             onChange={(e) => {
@@ -222,9 +222,9 @@ function RemindersDialog({ open, onClose }: { open: boolean; onClose: () => void
             placeholder="tomorrow at 5pm"
             aria-label="When"
             aria-describedby="when-preview"
-            className="sm:w-48"
+            className="h-10 sm:w-48"
           />
-          <Button type="submit" disabled={!text.trim() || !when.trim() || preview === null}>
+          <Button type="submit" className="h-10" disabled={!text.trim() || !when.trim() || preview === null}>
             Add
           </Button>
         </form>
@@ -242,9 +242,14 @@ function RemindersDialog({ open, onClose }: { open: boolean; onClose: () => void
                   type="button"
                   disabled={done}
                   aria-label={done ? "Completed" : `Mark "${r.reminder_text}" done`}
-                  onClick={() => api.completeReminder(r.id).then(refresh)}
+                  onClick={() =>
+                    api
+                      .completeReminder(r.id)
+                      .then(refresh)
+                      .catch(() => toast.error("Couldn't update the reminder."))
+                  }
                   className={cn(
-                    "flex size-5 shrink-0 items-center justify-center rounded-full border",
+                    "relative flex size-5 shrink-0 items-center justify-center rounded-full border after:absolute after:-inset-2.5",
                     done && "border-step-docs bg-step-docs text-white",
                   )}
                 >
@@ -260,7 +265,12 @@ function RemindersDialog({ open, onClose }: { open: boolean; onClose: () => void
                   variant="ghost"
                   size="icon"
                   aria-label={`Delete "${r.reminder_text}"`}
-                  onClick={() => api.deleteReminder(r.id).then(refresh)}
+                  onClick={() =>
+                    api
+                      .deleteReminder(r.id)
+                      .then(refresh)
+                      .catch(() => toast.error("Couldn't delete the reminder."))
+                  }
                   className="text-muted-foreground"
                 >
                   <Trash2 className="size-4" />

@@ -41,7 +41,15 @@ const router = createBrowserRouter([
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    {/* The SPA renders on the client, where next-themes' inline script never runs anyway; marking it as a data
+        block stops React warning about it on every load. */}
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="system"
+      enableSystem
+      disableTransitionOnChange
+      scriptProps={{ type: "application/json" }}
+    >
       <TooltipProvider delayDuration={400}>
         <RouterProvider router={router} />
         <Toaster position="bottom-center" />

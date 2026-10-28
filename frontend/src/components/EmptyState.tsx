@@ -13,34 +13,34 @@ const PROMPTS = [
 
 export function EmptyState({ onPick }: { onPick: (text: string) => void }) {
   return (
-    <div className="mx-auto flex w-full max-w-[var(--content-width)] flex-1 flex-col items-center justify-center px-4 pb-10 text-center">
+    <div className="mx-auto flex w-full max-w-[var(--content-width)] flex-1 flex-col items-center justify-center px-4 pt-2 pb-6 text-center sm:pb-10">
       <h1
-        className="animate-rise max-w-[16ch] font-display text-[clamp(2.5rem,4.6vw,4.25rem)] leading-[1.02] font-semibold tracking-[-0.04em]"
+        className="animate-rise max-w-[16ch] font-display text-[clamp(2rem,4.6vw,4.25rem)] leading-[1.02] font-semibold tracking-[-0.04em]"
         style={{ animationDelay: "0.05s" }}
       >
         What can I <span className="text-gradient">help you with?</span>
       </h1>
       <p
-        className="animate-rise mt-4 max-w-[50ch] text-[1.05rem] leading-relaxed text-muted-foreground"
+        className="animate-rise mt-3 max-w-[50ch] text-[0.95rem] leading-relaxed text-muted-foreground sm:mt-4 sm:text-[1.05rem]"
         style={{ animationDelay: "0.15s" }}
       >
         Ask about anything. ContextAI checks live data, reads your PDFs, remembers what you tell it, and shows every
         step it takes.
       </p>
-      <ul className="mt-10 grid w-full max-w-[52rem] gap-3 text-left sm:grid-cols-2">
+      <ul className="mt-6 grid w-full max-w-[52rem] gap-2.5 text-left sm:mt-10 sm:grid-cols-2 sm:gap-3">
         {PROMPTS.map((p, i) => (
           <li key={p.text} className="animate-rise" style={{ animationDelay: `${0.25 + i * 0.07}s` }}>
             <button
               type="button"
               onClick={() => onPick(p.text)}
-              className="group flex h-full w-full items-start gap-3.5 rounded-2xl border text-left bg-card/80 p-4 shadow-[0_18px_40px_-28px_rgb(30_20_90/0.45)] backdrop-blur-xl transition-[transform,border-color] hover:-translate-y-0.5 hover:border-brand/40"
+              className="group flex h-full w-full items-start gap-3.5 rounded-2xl border bg-card/80 p-3 text-left shadow-[0_18px_40px_-28px_rgb(30_20_90/0.45)] backdrop-blur-xl transition-[transform,border-color] hover:-translate-y-0.5 hover:border-brand/40 active:scale-[0.99] sm:p-4"
             >
               <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", p.tint)}>
                 <p.icon className="size-5" />
               </span>
               <span>
                 <span className="block text-[0.98rem] leading-snug font-medium">{p.text}</span>
-                <span className="mt-1 block text-[0.85rem] text-muted-foreground">{p.hint}</span>
+                <span className="mt-0.5 block text-[0.85rem] text-muted-foreground sm:mt-1">{p.hint}</span>
               </span>
             </button>
           </li>

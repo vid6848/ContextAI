@@ -1,5 +1,5 @@
 import { FileText } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router"
 import { toast } from "sonner"
 
@@ -9,6 +9,7 @@ import { ConnectionBanner } from "@/components/ConnectionBanner"
 import { AssistantMessage, UserMessage } from "@/components/MessageItem"
 import { SourcesPanel } from "@/components/Sources"
 import { useConnection } from "@/hooks/useConnection"
+import { isTouchDevice } from "@/hooks/useMediaQuery"
 import { useStickToBottom } from "@/hooks/useStickToBottom"
 import { useActiveMessages, useChat } from "@/store/chat"
 
@@ -23,13 +24,19 @@ export function ChatPage() {
   const composer = useRef<ComposerHandle>(null)
   const connection = useConnection()
   const { ref: scrollRef, scrollToBottom } = useStickToBottom<HTMLDivElement>(messages)
+  // The suggestions are taller than a phone screen: show them from the top, not scrolled to the end
+  const empty = messages.length === 0
+  useLayoutEffect(() => {
+    if (empty && scrollRef.current) scrollRef.current.scrollTop = 0
+  }, [empty, scrollRef])
 
   useEffect(() => {
     openConversation(id ?? null).catch(() => {
       toast.error("That chat doesn't exist or was deleted.")
       navigate("/chat", { replace: true })
     })
-    composer.current?.focus()
+    // Skip on touch devices: focusing would throw the on-screen keyboard over the conversation
+    if (!isTouchDevice()) composer.current?.focus()
   }, [id, openConversation, navigate])
 
   useEffect(() => {
@@ -91,7 +98,7 @@ export function ChatPage() {
         {messages.length === 0 ? (
           <EmptyState onPick={(text) => onSend(text)} />
         ) : (
-          <div className="mx-auto w-full max-w-[var(--content-width)] space-y-8 px-4 pt-6 pb-10">
+          <div className="mx-auto w-full max-w-[var(--content-width)] space-y-8 px-4 pt-4 pb-10 sm:pt-6">
             {messages.map((m, i) =>
               m.role === "user" ? (
                 <UserMessage key={m.key} message={m} />
@@ -102,11 +109,11 @@ export function ChatPage() {
           </div>
         )}
       </div>
-      <div className="mx-auto w-full max-w-[var(--content-width)] px-4 pb-3">
+      <div className="mx-auto w-full max-w-[var(--content-width)] px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4">
         <ConnectionBanner state={connection} />
         <Composer ref={composer} streaming={streaming} onSend={onSend} onStop={stop} />
         <p className="mt-2 text-center text-xs text-muted-foreground">
-          ContextAI can make mistakes. Check important information.
+          ContextAI can make mistakes.<span className="max-sm:hidden"> Check important information.</span>
         </p>
       </div>
       <SourcesPanel />

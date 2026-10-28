@@ -26,7 +26,7 @@ export function CodeBlock({ children }: { children?: ReactNode }) {
         <button
           type="button"
           onClick={copy}
-          className="inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 hover:bg-accent hover:text-foreground"
+          className="inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 hover:bg-accent hover:text-foreground touch:-my-1 touch:px-2.5 touch:py-2"
         >
           {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
           {copied ? "Copied" : "Copy"}
