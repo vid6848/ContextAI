@@ -15,8 +15,13 @@ interface AuthState {
   /** sign-in is configured on this server */
   enabled: boolean
   required: boolean
+  /** Google is switched on in the Supabase project, so its button can work */
+  googleEnabled: boolean
   session: Session | null
-  sendMagicLink: (email: string) => Promise<void>
+  signInWithGoogle: () => Promise<void>
+  signIn: (email: string, password: string) => Promise<void>
+  /** Resolves false when the project still requires confirming the email before the first sign-in. */
+  signUp: (email: string, password: string) => Promise<boolean>
   signOut: () => Promise<void>
 }
 
@@ -46,17 +51,51 @@ async function claimGuestData(session: Session): Promise<boolean> {
   return Object.values(moved).some((n) => n > 0)
 }
 
+const ACCOUNT_EXISTS = "That email already has an account. Sign in instead."
+
+function friendlyError(message: string): string {
+  if (/invalid login credentials/i.test(message)) return "Wrong email or password."
+  if (/already registered/i.test(message)) return ACCOUNT_EXISTS
+  if (/email not confirmed/i.test(message)) return "Confirm your email first, then sign in."
+  return message
+}
+
+/** Which sign-in providers the Supabase project has switched on (public, read-only). */
+async function isGoogleEnabled(config: AuthConfig): Promise<boolean> {
+  try {
+    const resp = await fetch(`${config.supabase_url}/auth/v1/settings`, { headers: { apikey: config.publishable_key } })
+    const settings = (await resp.json()) as { external?: { google?: boolean } }
+    return !!settings.external?.google
+  } catch {
+    return false
+  }
+}
+
 const redirectTo = () => `${window.location.origin}/chat`
 
 export const useAuth = create<AuthState>((set) => ({
   ready: false,
   enabled: false,
   required: false,
+  googleEnabled: false,
   session: null,
-  async sendMagicLink(email: string) {
+  async signInWithGoogle() {
     if (!client) return
-    const { error } = await client.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo() } })
+    const { error } = await client.auth.signInWithOAuth({ provider: "google", options: { redirectTo: redirectTo() } })
     if (error) throw error
+  },
+  async signIn(email, password) {
+    if (!client) return
+    const { error } = await client.auth.signInWithPassword({ email, password })
+    if (error) throw new Error(friendlyError(error.message))
+  },
+  async signUp(email, password) {
+    if (!client) return false
+    const { data, error } = await client.auth.signUp({ email, password, options: { emailRedirectTo: redirectTo() } })
+    if (error) throw new Error(friendlyError(error.message))
+    // With email confirmation on, Supabase hides "already registered" behind a user with no identities
+    if (data.user && data.user.identities?.length === 0) throw new Error(ACCOUNT_EXISTS)
+    return !!data.session
   },
   async signOut() {
     await client?.auth.signOut()
@@ -93,8 +132,8 @@ export async function initAuth(): Promise<void> {
   client = createClient(config.supabase_url, config.publishable_key, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "pkce" },
   })
-  const { data } = await client.auth.getSession()
-  useAuth.setState({ ready: true, enabled: true, required: config.required, session: data.session })
+  const [{ data }, googleEnabled] = await Promise.all([client.auth.getSession(), isGoogleEnabled(config)])
+  useAuth.setState({ ready: true, enabled: true, required: config.required, googleEnabled, session: data.session })
   if (data.session) await claimGuestData(data.session).catch(() => false)
 
   client.auth.onAuthStateChange((event, session) => {

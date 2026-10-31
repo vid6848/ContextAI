@@ -17,9 +17,15 @@ service, 512 MB RAM) with data in **Supabase**, so nothing is lost when the cont
    Never use the **secret** key (`sb_secret_…`); ContextAI doesn't need it.
 3. Tables are created automatically on the first start (`src/backend/db/schema.sql`). Row-level security
    is on with no policies, so Supabase's public API can't read them; only the server's connection can.
-4. Sign-in uses **email links**, which work out of the box. Under Authentication → URL Configuration,
-   set **Site URL** to your app's URL and add `<your app URL>/**` (plus `http://localhost:8000/**` and `http://localhost:5173/**` for local use)
-   to **Redirect URLs**.
+4. Set up sign-in under **Authentication**:
+   - **URL Configuration**: set **Site URL** to your app's URL and add `<your app URL>/**` (plus
+     `http://localhost:8000/**` and `http://localhost:5173/**` for local use) to **Redirect URLs**.
+   - **Sign In / Providers → Email**: turn off **Confirm email**, so email and password accounts work
+     straight away without sending any mail.
+   - **Sign In / Providers → Google**: in [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+     create an OAuth client (type **Web application**) with the callback URL Supabase shows as its authorized
+     redirect URI, then paste the client ID and secret into Supabase and enable the provider. The **Continue
+     with Google** button appears in the app once this is on.
 
 ## 2. Push notification keys
 
