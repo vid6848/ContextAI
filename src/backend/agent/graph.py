@@ -1,6 +1,7 @@
 """LangGraph agent orchestration graph for ContextAI with Tool Routing and Document RAG."""
 
 import json
+import logging
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -14,7 +15,7 @@ from langgraph.graph import END, START, StateGraph
 from src.backend.agent.state import AgentState
 from src.backend.agent.toolbox import TOOL_LABELS, TOOL_SPECS, ToolBox
 from src.backend.classifier.intent_classifier import IntentClassifier
-from src.backend.classifier.router import HybridRouter
+from src.backend.classifier.router import HybridRouter, tools_mentioned
 from src.backend.core import tracing
 from src.backend.core.config import settings
 from src.backend.llm.client import LLMClient
@@ -27,6 +28,8 @@ from src.backend.tools.calculator import CalculatorTool
 from src.backend.tools.crypto import CryptoTool
 from src.backend.tools.weather import WeatherTool
 from src.backend.tools.web_search import TavilySearchTool
+
+logger = logging.getLogger(__name__)
 
 # Module-level singletons for performance and reuse
 _default_classifier: IntentClassifier | None = None
@@ -195,6 +198,9 @@ TOOL_DISPLAY = {
     "web_search": ("Searching the web", "Tavily web search"),
 }
 MAX_STEP_DETAIL_CHARS = 4000
+MAX_LISTED_DOCUMENTS = 15
+# What the memory store is asked when a weather question doesn't say where
+HOME_QUERY = "where the user lives, their home city"
 # Tools whose structured result the UI renders as a card under the answer
 CARD_TOOLS = {"weather", "crypto"}
 CITATION_RULES = (
@@ -278,27 +284,57 @@ def choose_route(confidence: float) -> str:
 
 
 AGENT_SYSTEM_PROMPT = (
-    "You are ContextAI, a helpful personal assistant. It is now {now} in the user's timezone ({tz}).\n"
-    "You can call tools: a calculator, current weather, live crypto prices, web search, reminders, and a "
-    "search over the PDFs the user uploaded. Call a tool whenever the answer depends on live data, exact arithmetic, "
-    "recent facts or the user's documents. When a question has several parts, call several tools at once. "
-    "Never invent tool results; if a tool fails, say so briefly and answer what you can.\n"
+    "You are ContextAI, a helpful personal assistant. It is now {now} for the user ({tz}).\n"
+    "You can call tools: a calculator, weather now, a 5-day forecast, air quality, live crypto prices, web search, "
+    "reminders, and the PDFs the user uploaded. Call a tool whenever the answer depends on live data, exact "
+    "arithmetic, recent facts or the user's documents. When a question has several parts, call several tools at "
+    "once. Never invent tool results; if a tool fails, say so briefly and answer what you can.\n"
+    "Weather: use get_weather for right now and get_forecast for anything later, turning 'tomorrow' or a weekday "
+    "into a date. Use the place in the question, else the one from this conversation, else where the user lives "
+    "if you know it. If you have no place, ask which city in one short "
+    "sentence and don't call a weather tool. A follow-up like 'and tomorrow?' or 'what about Mumbai?' repeats the "
+    "last weather question with that change. For Fahrenheit pass units=imperial and call the tool again instead "
+    "of converting. For past weather, or climate and seasons beyond the 5-day forecast, use web_search.\n"
+    "Reply in the language of the user's message: English to English, romanized Hindi to romanized Hindi.\n"
     "Search results can be out of date: compare any dates you find with today's date, treat earlier dates as "
     "past events, and say so when the question is about the future.\n"
     "Web and document results are numbered. " + "{citations}"
 )
 
 
-def build_chat_messages(state: AgentState) -> list[dict[str, Any]]:
+def documents_prompt(documents: list[dict[str, Any]], active: list[str]) -> str:
+    """Tell the model which files exist, so "it" and "the PDF" resolve and it never says it can't see them."""
+    if not documents:
+        return ""
+    listing = "\n".join(f"- {d['document_name']} ({d['pages']} pages)" for d in documents[:MAX_LISTED_DOCUMENTS])
+    prompt = (
+        f"\n\nPDFs the user has uploaded:\n{listing}\n"
+        "You can read them with search_documents, so never say you can't see or open a file."
+    )
+    if active:
+        prompt += (
+            f" This chat is about {', '.join(active)}: 'it', 'this' and 'the document' mean that, and questions that "
+            "could be about it should be answered from it. Search it for summaries, translations and quizzes too."
+        )
+    return prompt
+
+
+def build_chat_messages(
+    state: AgentState, documents: list[dict[str, Any]] | None = None
+) -> list[dict[str, Any]]:
     """System prompt (with long-term memories), prior turns as real chat messages, then the new message."""
     tz = resolve_timezone(state.get("timezone"))
-    now = datetime.now(tz).strftime("%A %d %B %Y, %H:%M")
-    system = AGENT_SYSTEM_PROMPT.format(now=now, tz=tz.key, citations=CITATION_RULES)
+    local = datetime.now(tz)
+    now = local.strftime("%A %d %B %Y, %H:%M")
+    # An offset, not "Asia/Kolkata": the model reads a zone's city as where the user is
+    offset = local.strftime("UTC%z")
+    system = AGENT_SYSTEM_PROMPT.format(now=now, tz=offset, citations=CITATION_RULES)
     memories = state.get("semantic_memories") or []
     if memories:
         system += "\n\nThings the user told you before (use them when relevant):\n" + "\n".join(
             f"- {m}" for m in memories
         )
+    system += documents_prompt(documents or [], state.get("active_documents") or [])
     messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
     for m in state.get("conversation_history") or []:
         role = "assistant" if m.get("role") == "assistant" else "user"
@@ -378,6 +414,9 @@ def build_agent_graph(
                         user_id=user_id,
                         limit=3,
                     )
+                    if "WEATHER" in tools_mentioned(message):
+                        home = active_vs.get_relevant_memories(query=HOME_QUERY, user_id=user_id, limit=2)
+                        semantic_memories += [m for m in home if m not in semantic_memories]
                 except Exception:
                     semantic_memories = []
 
@@ -399,8 +438,18 @@ def build_agent_graph(
             "conversation_history": recent_history,
             "semantic_memories": semantic_memories,
             "context": context_data,
+            "active_documents": active_documents(state, active_sql, user_id),
             "steps": [step],
         }
+
+    def active_documents(state: AgentState, active_sql: SQLiteManager, user_id: str) -> list[str]:
+        """Files this message is about: its attachments, or the chat's latest ones if they still exist."""
+        if state.get("attachments"):
+            return state["attachments"]
+        conversation_id = state.get("conversation_id")
+        names = active_sql.latest_attachments(conversation_id, user_id) if conversation_id else []
+        pipeline = rag_pipeline or get_default_rag_pipeline()
+        return names if names and pipeline.count(user_id, names) else []
 
     def classify_intent_node(state: AgentState) -> dict:
         """Classify intent and decide the route: fixed single-tool fast path, or the LLM tool agent."""
@@ -409,8 +458,9 @@ def build_agent_graph(
         attachments = state.get("attachments") or []
         with agent_step("intent", "Classifying intent") as step:
             if attachments:
-                # The user pointed at specific files; no need to guess
-                intent, confidence, route = "DOCUMENT", 1.0, "classifier"
+                # The user pointed at specific files; no need to guess, unless the question also needs a tool
+                intent, confidence = "DOCUMENT", 1.0
+                route = "llm" if tools_mentioned(message) - {"DOCUMENT"} else "classifier"
                 step["label"] = f"Routed to your attached {'file' if len(attachments) == 1 else 'files'}"
                 step["detail"] = {"intent": intent, "attachments": attachments}
             elif settings.router_mode == "hybrid":
@@ -423,6 +473,9 @@ def build_agent_graph(
                     if route == "classifier"
                     else f"Letting the model choose tools ({decision.reason})"
                 )
+                if intent == "GENERAL" and route == "classifier" and state.get("active_documents"):
+                    route = "llm"  # a plain-looking question in a chat about a file may be about that file
+                    step["label"] = "Letting the model choose tools (this chat has a document)"
             else:
                 pred = active_classifier.predict(message)
                 intent, confidence = pred.intent, pred.confidence
@@ -459,6 +512,11 @@ def build_agent_graph(
         else:
             return "generate_response"
 
+    def after_weather(state: AgentState) -> str:
+        """The fast path misread the place: let the model work it out instead of reporting a false failure."""
+        needs_model = (state.get("tool_result") or {}).get("needs_place") and settings.router_mode == "hybrid"
+        return "llm_agent" if needs_model else "generate_response"
+
     def run_tool(name: str, tool: Any, msg: str) -> dict:
         """Run a tool inside a timed step that records its input and output."""
         running_label, display = TOOL_DISPLAY[name]
@@ -494,10 +552,10 @@ def build_agent_graph(
         msg = _extract_message(state)
         pipeline = rag_pipeline or get_default_rag_pipeline()
         with agent_step("tool:document_rag", "Searching your documents") as step:
-            attachments = state.get("attachments") or None
+            scope = state.get("active_documents") or None
             chunks = pipeline.retrieve(
-                msg, limit=6 if attachments else 4, user_id=state.get("user_id") or "default_user",
-                document_names=attachments,
+                msg, limit=6 if scope else 4, user_id=state.get("user_id") or "default_user",
+                document_names=scope,
             )
             _, sources = pipeline.format_context(chunks)
             step["label"] = (
@@ -540,8 +598,20 @@ def build_agent_graph(
             reminders=get_default_reminder_manager(),
             user_id=state.get("user_id") or "default_user",
             timezone=state.get("timezone"),
+            documents=state.get("active_documents"),
+            message=_extract_message(state),
+            conversation_text=" ".join(
+                [_extract_message(state), *(state.get("semantic_memories") or []),
+                 *(m.get("message", "") for m in state.get("conversation_history") or [])]
+            ),
         )
-        messages = build_chat_messages(state)
+        user_id = state.get("user_id") or "default_user"
+        try:
+            documents = toolbox.rag.list_documents(user_id)
+        except Exception:
+            logger.exception("Couldn't list documents")
+            documents = []
+        messages = build_chat_messages(state, documents)
         steps: list[dict[str, Any]] = []
         tools_used: list[str] = []
         answer: list[str] = []
@@ -626,8 +696,8 @@ def build_agent_graph(
                     "I couldn't find anything about that in your documents. "
                     "Try rephrasing, or ask about something they cover."
                     if has_docs
-                    else "No documents have been indexed yet. "
-                    "Please ingest a PDF document first so I can answer questions from it."
+                    else "You haven't uploaded any documents yet. "
+                    "Attach a PDF with the paperclip and I'll answer from it."
                 )
                 get_stream_writer()({"type": "token", "text": no_doc_msg})
                 return {
@@ -641,9 +711,17 @@ def build_agent_graph(
         if state.get("document_chunks"):
             pipeline = rag_pipeline or get_default_rag_pipeline()
             rag_text, _ = pipeline.format_context(state["document_chunks"])
+            names = sorted({c.get("document_name", "") for c in state["document_chunks"]})
+            documents = [
+                f"{d['document_name']} ({d['pages']} pages)"
+                for d in pipeline.list_documents(state.get("user_id") or "default_user")
+                if d["document_name"] in names
+            ]
             context_sections.append(
+                f"Documents: {', '.join(documents or names)}\n"
                 f"Numbered passages from the user's documents:\n{rag_text}\n"
-                f"Answer the user's question from these passages. {CITATION_RULES}"
+                "Answer the user's question from these passages. They may be a sample from across a long "
+                f"document, so for a summary cover the whole document, not just the start. {CITATION_RULES}"
             )
 
         # 2. Tool Execution Result
@@ -790,7 +868,9 @@ def build_agent_graph(
 
     # Tool and RAG nodes proceed to generate_response
     workflow.add_edge("calculator", "generate_response")
-    workflow.add_edge("weather", "generate_response")
+    workflow.add_conditional_edges(
+        "weather", after_weather, {"llm_agent": "llm_agent", "generate_response": "generate_response"}
+    )
     workflow.add_edge("crypto", "generate_response")
     workflow.add_edge("web_search", "generate_response")
     workflow.add_edge("document_rag", "generate_response")

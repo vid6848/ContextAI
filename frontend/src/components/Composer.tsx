@@ -1,11 +1,11 @@
-import { ArrowUp, FileText, LoaderCircle, Paperclip, Square, TriangleAlert, X } from "lucide-react"
+import { ArrowUp, FileText, LoaderCircle, Paperclip, RotateCw, Square, TriangleAlert, X } from "lucide-react"
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { isTouchDevice, useMediaQuery } from "@/hooks/useMediaQuery"
-import { MAX_UPLOAD_MB, uploadWithProgress } from "@/lib/api"
+import { MAX_UPLOAD_MB, uploadWithProgress, type UploadResult } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 const MAX_ATTACHMENTS = 5
@@ -17,6 +17,7 @@ interface Attachment {
   progress: number
   detail?: string
   controller: AbortController
+  file: File
 }
 
 export interface ComposerHandle {
@@ -30,6 +31,12 @@ interface ComposerProps {
   onStop: () => void
 }
 
+function uploadSummary(res: UploadResult) {
+  const pages = `${res.total_pages} ${res.total_pages === 1 ? "page" : "pages"}`
+  if (res.note) return `${pages}, ${res.note}`
+  return res.scanned_pages ? `${pages}, scanned` : pages
+}
+
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer({ streaming, onSend, onStop }, ref) {
   const [value, setValue] = useState("")
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -38,6 +45,21 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
   const update = (id: string, patch: Partial<Attachment>) =>
     setAttachments((list) => list.map((a) => (a.id === id ? { ...a, ...patch } : a)))
+
+  const upload = (att: Attachment) => {
+    uploadWithProgress(att.file, (p) => update(att.id, { progress: p }), att.controller.signal)
+      .then((res) => update(att.id, { status: "ready", progress: 1, name: res.document_name, detail: uploadSummary(res) }))
+      .catch((err: Error) => {
+        if (err.name === "AbortError") return
+        update(att.id, { status: "error", detail: err.message })
+      })
+  }
+
+  const retry = (att: Attachment) => {
+    const again = { ...att, controller: new AbortController(), status: "uploading" as const, progress: 0, detail: undefined }
+    update(att.id, again)
+    upload(again)
+  }
 
   const addFiles = (files: FileList | File[]) => {
     const pdfs = Array.from(files).filter((f) => {
@@ -62,16 +84,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         status: "uploading",
         progress: 0,
         controller: new AbortController(),
+        file,
       }
       setAttachments((list) => [...list, att])
-      uploadWithProgress(file, (p) => update(att.id, { progress: p }), att.controller.signal)
-        .then((res) =>
-          update(att.id, { status: "ready", progress: 1, name: res.document_name, detail: `${res.total_pages} pages` }),
-        )
-        .catch((err: Error) => {
-          if (err.name === "AbortError") return
-          update(att.id, { status: "error", detail: err.message })
-        })
+      upload(att)
     }
     // On phones and tablets this would pop the keyboard up over the upload progress
     if (!isTouchDevice()) textarea.current?.focus()
@@ -115,13 +131,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       className="rounded-[1.75rem] border bg-card/85 p-2 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_18px_40px_-20px_rgb(40_25_120/0.35)] backdrop-blur-xl transition-[border-color,box-shadow] focus-within:border-brand/50 focus-within:shadow-[0_0_0_4px_color-mix(in_oklab,var(--brand)_14%,transparent),0_18px_40px_-20px_rgb(40_25_120/0.4)]"
     >
       {attachments.length > 0 && (
-        <ul className="flex flex-wrap gap-2 px-1 pt-1 pb-2" aria-label="Attached files">
+        <ul
+          className="flex max-h-[24dvh] flex-wrap items-start gap-2 overflow-y-auto px-1 pt-1 pb-2 max-sm:flex-nowrap max-sm:overflow-x-auto"
+          aria-label="Attached files"
+        >
           {attachments.map((a) => (
             <li
               key={a.id}
               className={cn(
-                "relative flex max-w-full items-center sm:max-w-[15rem] gap-2.5 overflow-hidden rounded-xl border bg-background py-2 pr-8 pl-2.5",
-                a.status === "error" && "border-step-error/40",
+                "relative flex max-w-full items-center max-sm:max-w-[85%] max-sm:shrink-0 sm:max-w-[15rem] gap-2.5 overflow-hidden rounded-xl border bg-background py-2 pr-8 pl-2.5",
+                a.status === "error" && "border-step-error/40 pr-16 sm:max-w-[20rem]",
               )}
             >
               <span
@@ -140,7 +159,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               </span>
               <span className="min-w-0">
                 <span className="block truncate text-[0.8125rem] font-medium">{a.name}</span>
-                <span className={cn("block truncate text-xs text-muted-foreground", a.status === "error" && "text-step-error")}>
+                <span className={cn("block truncate text-xs text-muted-foreground", a.status === "error" && "whitespace-normal text-step-error")}>
                   {a.status === "uploading"
                     ? a.progress < 1
                       ? `Uploading ${Math.round(a.progress * 100)}%`
@@ -148,6 +167,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                     : a.detail}
                 </span>
               </span>
+              {a.status === "error" && (
+                <button
+                  type="button"
+                  onClick={() => retry(a)}
+                  aria-label={`Try uploading ${a.name} again`}
+                  className="absolute right-8 top-1 flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+                >
+                  <RotateCw className="size-3.5" />
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => removeAttachment(a)}
@@ -227,7 +256,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                 ? "Ask anything"
                 : "Ask anything, or attach a PDF"
           }
-          className="max-h-[min(13.75rem,30dvh)] min-w-0 flex-1 resize-none bg-transparent py-2 pl-1 text-[1rem] leading-relaxed outline-none placeholder:text-muted-foreground"
+          className="max-h-[min(13.75rem,24dvh)] min-w-0 flex-1 resize-none bg-transparent py-2 pl-1 text-[1rem] leading-relaxed outline-none placeholder:text-muted-foreground"
         />
         <Button
           type="submit"

@@ -116,8 +116,10 @@ def completion(
 def _iter_chunks(resp: requests.Response) -> Iterator[dict[str, Any]]:
     """Parse a server-sent event stream of completion chunks."""
     try:
-        for line in resp.iter_lines(decode_unicode=True):
-            if not line or not line.startswith("data:"):
+        # Split as bytes: decoded text would also break on U+2028 and the like, which sit raw inside JSON strings
+        for raw_line in resp.iter_lines():
+            line = raw_line.decode("utf-8", errors="replace")
+            if not line.startswith("data:"):
                 continue
             payload = line[len("data:"):].strip()
             if payload == "[DONE]":

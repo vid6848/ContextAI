@@ -36,7 +36,8 @@ def extract_blocks(pdf_doc: Any) -> list[Block]:
             text = " ".join(
                 "".join(s["text"] for s in line.get("spans", [])).strip() for line in block.get("lines", [])
             )
-            text = re.sub(r"\s+", " ", text).strip()
+            # Postgres text can't hold NUL, which some PDF fonts emit
+            text = re.sub(r"\s+", " ", text.replace("\x00", "")).strip()
             if text:
                 blocks.append(Block(
                     page=page_idx,

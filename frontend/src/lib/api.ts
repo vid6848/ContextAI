@@ -119,6 +119,8 @@ export interface UploadResult {
   document_name: string
   total_pages: number
   total_chunks: number
+  scanned_pages?: number
+  note?: string | null
 }
 
 export const MAX_UPLOAD_MB = 10
@@ -134,9 +136,11 @@ export function uploadWithProgress(file: File, onProgress: (fraction: number) =>
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) return resolve(xhr.response as UploadResult)
       const detail = xhr.response?.detail
-      reject(new ApiError(xhr.status, typeof detail === "string" ? detail : `Upload failed (${xhr.status}).`))
+      if (typeof detail === "string") return reject(new ApiError(xhr.status, detail))
+      // No JSON body: the host answered for us, usually while the free instance wakes up or restarts
+      reject(new ApiError(xhr.status, xhr.status >= 500 ? "The server is restarting. Try again in a minute." : `Upload failed (${xhr.status}).`))
     }
-    xhr.onerror = () => reject(new ApiError(0, "Upload failed. Check your connection."))
+    xhr.onerror = () => reject(new ApiError(0, "Upload failed. Check your connection and try again."))
     xhr.onabort = () => reject(new DOMException("Upload cancelled", "AbortError"))
     signal?.addEventListener("abort", () => xhr.abort())
     const form = new FormData()

@@ -18,7 +18,8 @@
 | **Live agent trace** | Each answer opens with a colour-coded rail of the agent's steps: memory, routing, tools, documents, errors. Each step is timed and expands to show the exact tool input and output. |
 | **Streaming chat** | Answers stream token by token over Server-Sent Events, with Stop (Esc), Regenerate, Edit-and-resend, Copy and 👍/👎 feedback. |
 | **PDF Q&A with citations** | Drag a PDF into the chat and ask about it. Chunks follow the document's headings, retrieval is re-ranked (semantic + keyword), and answers cite passages inline as `[1]`; clicking one opens the exact excerpt, page and section. |
-| **Live tools** | CoinGecko crypto prices and OpenWeather (shown as cards), Tavily web search (with sources and today's date for freshness), and a safe AST-based calculator. |
+| **Live tools** | CoinGecko crypto prices; OpenWeather current weather, 5-day forecast and air quality (shown as cards, in any units, with a follow-up like "and tomorrow?" understood); Tavily web search (with sources and today's date for freshness); and a safe AST-based calculator. |
+| **Ask your PDFs anything** | Summaries read across the whole file, not its first passages. "Page 12", "the last page", follow-ups in the same chat and comparisons all work, and scanned PDFs are read with Gemini vision. |
 | **Long-term memory** | After each reply an LLM pass extracts durable facts ("Prefers Python examples") and reconciles them with what's stored: a move *updates* your city instead of contradicting it. The Memory page lets you edit or delete anything. |
 | **Reminders** | "Remind me to call mom tomorrow evening" works from chat, parsed in your timezone, with browser push notifications even when no tab is open. |
 | **Accounts** | Use it as a guest, or sign in with an email link to keep chats, memories and documents across devices; everything from the guest session moves into the account. |

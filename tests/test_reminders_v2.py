@@ -129,7 +129,7 @@ def test_model_can_create_and_list_reminders_from_chat(monkeypatch):
                 elif line.startswith("data: "):
                     events.append((name, json.loads(line[6:])))
 
-    assert "Asia/Kolkata" in seen[0][0]["content"]  # the model is told the user's local time and zone
+    assert "UTC+0530" in seen[0][0]["content"]  # the model is told the user's local time and offset
     done = next(d for n, d in events if n == "done")
     [card] = done["cards"]
     assert card["tool"] == "reminder" and card["output"]["text"] == "Call mom"

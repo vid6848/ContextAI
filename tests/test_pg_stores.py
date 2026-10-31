@@ -47,11 +47,15 @@ def test_documents_ingest_retrieve_gate_list_delete(stores, tmp_path):
     path.write_bytes(handbook_pdf())
     assert docs.ingest_pdf(str(path), user_id="u1")["total_chunks"] == 5
     docs.ingest_pdf(str(path), user_id="u1")  # re-upload replaces, not duplicates
+    passages = docs._passages("u1", None)  # whole-document questions read these in order
+    assert [p["chunk_index"] for p in passages] == sorted(p["chunk_index"] for p in passages)
+    assert passages and {"content", "document_name", "page_number", "section"} <= set(passages[0])
+    assert docs.retrieve("summarize this", user_id="u1", document_names=[passages[0]["document_name"]])
 
     assert docs.count("u1") == 5 and docs.count("u2") == 0
     assert docs.retrieve("who approves business class flights", limit=2, user_id="u1")[0]["section"] == "5. Expenses"
     assert docs.retrieve("recipe for chocolate cake", limit=3, user_id="u1") == []
-    assert len(docs.retrieve("what is this about?", user_id="u1", document_names=["handbook.pdf"])) == 4
+    assert len(docs.retrieve("what is this about?", user_id="u1", document_names=["handbook.pdf"])) == 5
 
     [listed] = docs.list_documents("u1")
     assert (listed["document_name"], listed["pages"], listed["chunks"]) == ("handbook.pdf", 2, 5)

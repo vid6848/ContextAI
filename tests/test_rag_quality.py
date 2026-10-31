@@ -109,7 +109,7 @@ def test_retrieval_finds_the_right_section_and_rejects_unrelated_questions(handb
 
 def test_attachment_scoped_search_skips_the_gate(handbook):
     results = handbook.retrieve("what is this about?", limit=3, user_id="u1", document_names=["handbook.pdf"])
-    assert len(results) == 3
+    assert {r["page_number"] for r in results} >= {1, 2}  # the whole document, not just its first passages
 
 
 # ---------------------------------------------------------------- management

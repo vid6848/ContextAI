@@ -39,6 +39,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 UPLOAD_READ_CHUNK = 1024 * 1024
+MAX_DOCUMENT_NAME = 200  # chat attachments reference a file by name, capped at 255
+# A PDF header may legally sit after a little junk, which some scanners and phone apps write
+PDF_HEADER_WINDOW = 1024
+# Parsing and embedding peak in memory: one at a time, or five attached PDFs add up past 512 MB
+_ingest_slot = asyncio.Semaphore(1)
 
 chat_rate_limit = rate_limit("chat", lambda: settings.rate_limit_chat_per_minute)
 upload_rate_limit = rate_limit("upload", lambda: settings.rate_limit_upload_per_minute)
@@ -508,22 +513,25 @@ async def upload_document(
         if size == 0:
             raise HTTPException(status_code=400, detail="Uploaded file is empty.")
         with open(tmp_path, "rb") as fh:
-            if fh.read(5) != b"%PDF-":
+            if b"%PDF-" not in fh.read(PDF_HEADER_WINDOW):
                 raise HTTPException(status_code=400, detail="File is not a valid PDF.")
 
         pipeline = get_default_rag_pipeline()
-        # In a worker thread, so parsing and embedding a big PDF doesn't stall every other request
-        res = await run_in_threadpool(
-            pipeline.ingest_pdf, tmp_path, user_id=user_id, document_name=os.path.basename(file.filename)
-        )
+        stem, extension = os.path.splitext(os.path.basename(file.filename))
+        document_name = stem[: MAX_DOCUMENT_NAME - len(extension)] + extension
+        async with _ingest_slot:
+            # In a worker thread, so parsing and embedding a big PDF doesn't stall every other request
+            res = await run_in_threadpool(pipeline.ingest_pdf, tmp_path, user_id=user_id, document_name=document_name)
         if not res.get("success"):
             raise HTTPException(status_code=422, detail=res.get("error", "PDF ingestion failed."))
 
         return {
             "success": True,
-            "document_name": file.filename,
+            "document_name": document_name,
             "total_pages": res.get("total_pages", 0),
             "total_chunks": res.get("total_chunks", 0),
+            "scanned_pages": res.get("scanned_pages", 0),
+            "note": res.get("note"),
         }
     finally:
         if os.path.exists(tmp_path):

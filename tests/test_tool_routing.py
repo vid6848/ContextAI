@@ -186,6 +186,6 @@ def test_routing_document_rag_empty_no_documents(tmp_path):
     result = app.invoke({"message": "Summarize the document"})
 
     assert result["intent"] == "DOCUMENT"
-    assert "No documents have been indexed yet" in result["response"]
+    assert "haven't uploaded any documents" in result["response"]
     # LLM should not be called to invent answers when no documents exist
     mock_llm.generate_response.assert_not_called()

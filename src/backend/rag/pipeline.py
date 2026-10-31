@@ -11,10 +11,16 @@ import pymupdf
 
 from src.backend.core.config import settings
 from src.backend.db.embeddings import embed
+from src.backend.rag.ocr import MAX_OCR_PAGES, ocr_pages, pages_needing_ocr
+from src.backend.rag.query import is_overview, pick_pages, requested_pages, spread
 from src.backend.rag.rerank import rerank
 from src.backend.rag.structure import chunk_document_text, extract_blocks, structure_chunks
 
 logger = logging.getLogger(__name__)
+
+# Passages behind a question about a whole document or about named pages
+OVERVIEW_PASSAGES = 24
+PAGE_PASSAGES = 30
 
 
 def chunk_text(text: str, chunk_size: int = 500, chunk_overlap: int = 50) -> list[str]:
@@ -129,10 +135,23 @@ class DocumentRAGPipeline:
 
         try:
             pdf_doc = pymupdf.open(file_path)
+            if pdf_doc.needs_pass:
+                pdf_doc.close()
+                return {
+                    "success": False,
+                    "document_name": doc_name,
+                    "error": "This PDF is password-protected. Remove the password and upload it again.",
+                }
             total_pages = len(pdf_doc)
 
+            blocks = extract_blocks(pdf_doc)
+            scanned = pages_needing_ocr(pdf_doc, blocks)
+            if scanned:
+                blocks.extend(ocr_pages(pdf_doc, scanned[:MAX_OCR_PAGES]))
+                blocks.sort(key=lambda b: b.page)  # stable: each page keeps its reading order
+
             uploaded_at = datetime.now(UTC).isoformat()
-            for chunk_idx, chunk in enumerate(structure_chunks(extract_blocks(pdf_doc), max_chars=chunk_size)):
+            for chunk_idx, chunk in enumerate(structure_chunks(blocks, max_chars=chunk_size)):
                 metadata: dict[str, Any] = {
                     "document_name": doc_name,
                     "document_id": document_id,
@@ -151,21 +170,32 @@ class DocumentRAGPipeline:
 
             pdf_doc.close()
 
-            if documents_to_add:
-                self._upsert(ids_to_add, documents_to_add, metadatas_to_add)
+            if not documents_to_add:
+                return {
+                    "success": False,
+                    "document_name": doc_name,
+                    "error": "Couldn't find any readable text in this PDF. If it's a scan, try a sharper copy.",
+                }
 
-            return {
+            self._upsert(ids_to_add, documents_to_add, metadatas_to_add)
+            self._drop_older_versions(user_id, doc_name, document_id)
+
+            result = {
                 "success": True,
                 "document_name": doc_name,
                 "total_pages": total_pages,
                 "total_chunks": len(documents_to_add),
+                "scanned_pages": min(len(scanned), MAX_OCR_PAGES),
             }
+            if len(scanned) > MAX_OCR_PAGES:
+                result["note"] = f"only the first {MAX_OCR_PAGES} scanned pages were read"
+            return result
         except Exception:
             logger.exception("Failed to ingest PDF %s", doc_name)
             return {
                 "success": False,
                 "document_name": doc_name,
-                "error": "Failed to read this PDF. It may be corrupted, encrypted, or image-only.",
+                "error": "This PDF couldn't be read. It may be damaged; try exporting or downloading it again.",
             }
 
     def retrieve(
@@ -175,7 +205,11 @@ class DocumentRAGPipeline:
         user_id: str | None = None,
         document_names: list[str] | None = None,
     ) -> list[dict[str, Any]]:
-        """Semantic search over indexed chunks, restricted to user_id's documents (and named ones) when given."""
+        """Passages for a question, restricted to user_id's documents (and named ones) when given.
+
+        Named pages and questions about a whole document read those passages directly; anything else is a
+        semantic search. Each document gets its share when several are in scope, so one can't crowd out another.
+        """
         if self.collection is None:
             self.initialize()
 
@@ -183,10 +217,41 @@ class DocumentRAGPipeline:
         if total == 0:
             return []
 
+        documents = self.list_documents(user_id) if user_id and not document_names else []
+        # With nothing attached these mean the most recent upload (for a page: the most recent that has it)
+        newest_first = [[d["document_name"]] for d in documents] or [None]
+        pages = requested_pages(query)
+        if pages:
+            for scope in [document_names] if document_names else newest_first:
+                if chosen := pick_pages(self._passages(user_id, scope), pages, PAGE_PASSAGES):
+                    return chosen
+        elif is_overview(query, document_names or [d["document_name"] for d in documents]):
+            if chosen := spread(self._passages(user_id, document_names or newest_first[0]), OVERVIEW_PASSAGES):
+                return chosen
+
+        if document_names and len(document_names) > 1:
+            share = max(limit // len(document_names), 2)
+            return [c for name in document_names for c in self._search(query, share, user_id, [name])]
+        return self._search(query, limit, user_id, document_names)
+
+    def _search(
+        self, query: str, limit: int, user_id: str | None, document_names: list[str] | None
+    ) -> list[dict[str, Any]]:
+        total = self.count(user_id, document_names)
+        if total == 0:
+            return []
         # Over-fetch candidates, then re-rank with keyword coverage and drop unrelated passages
         chunks = self._candidates(query, min(max(limit * 4, 12), total), user_id, document_names)
         # When the user attached specific files, "summarize this" must still return their passages
         return rerank(query, chunks, limit, gate=not document_names)
+
+    def _drop_older_versions(self, user_id: str | None, doc_name: str, document_id: str) -> None:
+        """A new file under an existing name replaces it: answers shouldn't mix two versions of one document."""
+        if not user_id:
+            return
+        for doc in self.list_documents(user_id):
+            if doc["document_name"] == doc_name and doc["document_id"] != document_id:
+                self.delete_document(user_id, doc["document_id"])
 
     # ---- storage primitives (overridden by the Postgres/pgvector store) ----
 
@@ -218,6 +283,22 @@ class DocumentRAGPipeline:
                     "section": meta.get("section"),
                 })
         return chunks
+
+    def _passages(self, user_id: str | None, document_names: list[str] | None) -> list[dict[str, Any]]:
+        """Every passage in scope, in reading order within each document."""
+        rows = self.collection.get(where=self._where(user_id, document_names), include=["documents", "metadatas"])
+        passages = [
+            {
+                "content": doc,
+                "document_name": meta.get("document_name", "Unknown"),
+                "page_number": meta.get("page_number", 1),
+                "chunk_id": cid,
+                "chunk_index": meta.get("chunk_index", 0),
+                "section": meta.get("section"),
+            }
+            for cid, doc, meta in zip(rows["ids"], rows["documents"], rows["metadatas"], strict=True)
+        ]
+        return sorted(passages, key=lambda p: (p["document_name"], p["chunk_index"]))
 
     def list_documents(self, user_id: str) -> list[dict[str, Any]]:
         """The user's documents with page and passage counts, newest first."""

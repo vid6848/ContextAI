@@ -12,6 +12,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from src.backend.classifier.intent_classifier import IntentClassifier, get_default_training_data
+from src.backend.tools.weather import is_plain_current_weather
 
 # Intents the fast path can't serve: reminders need the reminder tools
 LLM_ONLY_INTENTS = {"REMINDER"}
@@ -19,7 +20,7 @@ LLM_ONLY_INTENTS = {"REMINDER"}
 # Vocabulary that signals a tool. If a message touches a second tool's vocabulary, it's multi-part.
 TOOL_VOCAB = {
     "WEATHER": r"\b(weather|rain|raining|temperature|snow|snowing|forecast|humid|humidity|windy|wind|sunny|cloudy|"
-    r"jacket|umbrella)\b",
+    r"jacket|umbrella|hot|cold|aqi|air quality|pollution|sunrise|sunset|mausam|barish|baarish)\b",
     "CRYPTO": r"\b(bitcoin|btc|eth|ethereum|crypto|solana|sol|doge|dogecoin|xrp|cardano|ada|coin|coins)\b",
     "CALCULATOR": r"(\d\s*[-+*/x^%]\s*\d|\bpercent\b|%|\bcalculate\b|\bcompute\b|\bmultiply\b|\bdivide\b|\bplus\b|"
     r"\bminus\b|\btimes\b|\bpower of\b|\bsquare\b|\bin (dollars|usd|inr|rupees|euros?|fahrenheit|celsius)\b)",
@@ -88,4 +89,6 @@ class HybridRouter:
             return RouteDecision(embed_intent, similarity, "llm", "asks for more than one thing")
         if similarity < min_similarity:
             return RouteDecision(embed_intent, similarity, "llm", "not confident enough")
+        if embed_intent == "WEATHER" and not is_plain_current_weather(text):
+            return RouteDecision(embed_intent, similarity, "llm", "needs a place or a forecast")
         return RouteDecision(embed_intent, similarity, "classifier", "both classifiers agree")

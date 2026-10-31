@@ -157,6 +157,22 @@ class PgDocumentRAGPipeline(DocumentRAGPipeline):
             for r in rows
         ]
 
+    def _passages(self, user_id: str | None, document_names: list[str] | None) -> list[dict[str, Any]]:
+        where, params = self._filter(user_id, document_names)
+        with self.db.connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT id, content, document_name, page_number, chunk_index, section
+                FROM document_chunks{where} ORDER BY document_name, chunk_index
+                """,
+                params,
+            ).fetchall()
+        return [
+            {"content": r["content"], "document_name": r["document_name"], "page_number": r["page_number"],
+             "chunk_id": r["id"], "chunk_index": r["chunk_index"], "section": r["section"]}
+            for r in rows
+        ]
+
     def list_documents(self, user_id: str) -> list[dict[str, Any]]:
         with self.db.connect() as conn:
             return conn.execute(

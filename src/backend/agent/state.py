@@ -13,6 +13,8 @@ class AgentState(TypedDict, total=False):
     conversation_id: str
     # Names of PDFs attached to this message; routes to document search over just those files
     attachments: list[str]
+    # This message's attachments, or those of the last message in the chat that had any
+    active_documents: list[str]
     timezone: str
     intent: str
     current_intent: str

@@ -214,6 +214,22 @@ class SQLiteManager:
             # Reverse so that oldest is first and newest is last (chronological)
             return list(reversed(rows))
 
+    def latest_attachments(self, conversation_id: str, user_id: str) -> list[str]:
+        """The files attached to the most recent user message that had any, so follow-ups stay on them."""
+        with self.get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT metadata FROM conversation_history
+                WHERE conversation_id = ? AND user_id = ? AND role = 'user' AND metadata IS NOT NULL
+                ORDER BY id DESC LIMIT 10
+                """,
+                (conversation_id, user_id),
+            ).fetchall()
+        for row in rows:
+            if attachments := (decode_json(row["metadata"]) or {}).get("attachments"):
+                return list(attachments)
+        return []
+
     def get_conversation_messages(self, conversation_id: str, user_id: str) -> list[dict[str, Any]]:
         """Return every message in a conversation, oldest first, with decoded metadata."""
         with self.get_connection() as conn:

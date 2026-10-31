@@ -45,7 +45,7 @@ def test_reminders_always_go_to_the_model(router):
 
 
 def test_simple_requests_take_the_fast_path(router):
-    cases = [("what's bitcoin trading at", "CRYPTO"), ("is it going to rain in london tomorrow", "WEATHER")]
+    cases = [("what's bitcoin trading at", "CRYPTO"), ("what's the weather in london right now", "WEATHER")]
     for text, intent in cases:
         decision = router.decide(text, settings.hybrid_confidence_threshold)
         assert (decision.route, decision.intent) == ("classifier", intent)

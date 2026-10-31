@@ -52,7 +52,8 @@ createRoot(document.getElementById("root")!).render(
     >
       <TooltipProvider delayDuration={400}>
         <RouterProvider router={router} />
-        <Toaster position="bottom-center" />
+        {/* Top: at the bottom it would sit on the message box on phones */}
+        <Toaster position="top-center" mobileOffset={{ top: "max(16px, env(safe-area-inset-top))" }} />
       </TooltipProvider>
     </ThemeProvider>
   </StrictMode>,

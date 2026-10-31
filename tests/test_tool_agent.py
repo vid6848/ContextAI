@@ -78,7 +78,7 @@ def test_model_chains_parallel_tools_then_answers(mock_weather, mock_crypto, llm
     with patch("src.backend.llm.client.LLMClient.chat_round", side_effect=model):
         events = stream({"message": "Weather in Pune and the ETH price?", "user_id": "ag1"})
 
-    mock_weather.assert_called_once_with("Pune")
+    mock_weather.assert_called_once_with("Pune", "metric")
     mock_crypto.assert_called_once_with("eth")
 
     steps = final_steps(events)

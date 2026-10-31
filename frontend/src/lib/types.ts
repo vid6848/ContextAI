@@ -33,6 +33,24 @@ export interface WeatherOutput {
   units?: "celsius" | "fahrenheit"
 }
 
+export interface ForecastDay {
+  date: string
+  weekday: string
+  high: number | null
+  low: number | null
+  condition?: string
+  description?: string
+  rain_chance_percent: number
+}
+
+export interface ForecastOutput {
+  location: string
+  units?: "celsius" | "fahrenheit"
+  today: string
+  days: ForecastDay[]
+  hours?: { time: string; temperature: number; description?: string; rain_chance_percent: number }[]
+}
+
 export interface CryptoOutput {
   coin: string
   price_usd: number
